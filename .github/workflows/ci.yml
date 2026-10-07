@@ -1,0 +1,46 @@
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  swift-macos:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test core, formats, backends and AI providers
+        run: swift test
+      - name: Build CLI
+        run: swift build --product runa
+      - name: Build Mac app
+        run: |
+          xcodebuild -project Apps/Runa/Runa.xcodeproj -scheme Runa -configuration Debug \
+            -destination 'platform=macOS' CODE_SIGNING_ALLOWED=NO build
+
+  swift-linux:
+    runs-on: ubuntu-latest
+    container: swift:6.2
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test core
+        run: swift test
+      - name: Build CLI
+        run: swift build -c release --product runa --static-swift-stdlib
+
+  figma-plugin:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: figma-plugin
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: figma-plugin/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build

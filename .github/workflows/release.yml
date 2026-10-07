@@ -1,0 +1,111 @@
+name: Release
+# Push a tag like v0.1.0. Produces Runa.dmg, the runa CLI for macOS and Linux, and the Figma plugin.
+# Signing and notarization run when these secrets exist; otherwise the app is ad-hoc signed:
+#   MACOS_CERTIFICATE (base64 .p12 of a Developer ID Application certificate), MACOS_CERTIFICATE_PASSWORD,
+#   APPLE_ID, APPLE_TEAM_ID, APPLE_APP_PASSWORD (an app-specific password).
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  cli-linux:
+    strategy:
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            arch: x86_64
+          - runner: ubuntu-24.04-arm
+            arch: aarch64
+    runs-on: ${{ matrix.runner }}
+    container: swift:6.2
+    steps:
+      - uses: actions/checkout@v4
+      - run: swift build -c release --product runa --static-swift-stdlib
+      - run: cp .build/release/runa runa-linux-${{ matrix.arch }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: runa-linux-${{ matrix.arch }}
+          path: runa-linux-${{ matrix.arch }}
+
+  mac:
+    runs-on: macos-15
+    env:
+      MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
+      MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Import signing certificate
+        if: env.MACOS_CERTIFICATE != ''
+        run: |
+          echo "$MACOS_CERTIFICATE" | base64 --decode > cert.p12
+          security create-keychain -p ci build.keychain
+          security default-keychain -s build.keychain
+          security unlock-keychain -p ci build.keychain
+          security import cert.p12 -k build.keychain -P "$MACOS_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k ci build.keychain
+          echo "SIGN_IDENTITY=Developer ID Application" >> "$GITHUB_ENV"
+      - name: Build universal CLI
+        run: |
+          swift build -c release --product runa --arch arm64 --arch x86_64
+          cp .build/apple/Products/Release/runa runa-macos-universal
+      - name: Build app
+        run: |
+          xcodebuild -project Apps/Runa/Runa.xcodeproj -scheme Runa -configuration Release \
+            -destination 'generic/platform=macOS' -archivePath build/Runa.xcarchive archive \
+            CODE_SIGN_IDENTITY="${SIGN_IDENTITY:--}" CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM="${{ secrets.APPLE_TEAM_ID }}"
+          cp -R build/Runa.xcarchive/Products/Applications/Runa.app build/Runa.app
+      - name: Make DMG
+        run: |
+          mkdir -p build/dmg && cp -R build/Runa.app build/dmg/ && ln -s /Applications build/dmg/Applications
+          hdiutil create -volname Runa -srcfolder build/dmg -ov -format UDZO Runa.dmg
+      - name: Notarize
+        if: env.SIGN_IDENTITY != ''
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+        run: |
+          xcrun notarytool submit Runa.dmg --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" --password "$APPLE_APP_PASSWORD" --wait
+          xcrun stapler staple Runa.dmg
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mac
+          path: |
+            Runa.dmg
+            runa-macos-universal
+
+  figma-plugin:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - working-directory: figma-plugin
+        run: npm ci && npm run build
+      - run: |
+          mkdir -p runa-figma-plugin
+          cp figma-plugin/manifest.json runa-figma-plugin/
+          cp -R figma-plugin/dist runa-figma-plugin/dist
+          zip -r runa-figma-plugin.zip runa-figma-plugin
+      - uses: actions/upload-artifact@v4
+        with:
+          name: figma-plugin
+          path: runa-figma-plugin.zip
+
+  publish:
+    needs: [cli-linux, mac, figma-plugin]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --generate-notes \
+            Runa.dmg runa-macos-universal runa-linux-x86_64 runa-linux-aarch64 runa-figma-plugin.zip

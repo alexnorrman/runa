@@ -1,7 +1,27 @@
 # Runa — product and architecture plan
 
 _Status: v2, 2026-10-07. Updated with Alex's answers to the v1 questions. Remaining small
-decisions are in section 16._
+decisions are in section 16. Implementation status is in section 0._
+
+---
+
+## 0. Implementation status (2026-10-07)
+
+| Area | State |
+|---|---|
+| Core model, placeholders, CLDR plurals | Done, tested |
+| Formats: String Catalog, .strings/.stringsdict, Android XML, i18next, ICU (export and import) | Done, round-trip tested; String Catalog output verified byte-identical against Xcode's `xcstringstool` |
+| Import planner with conflict buckets | Done, tested; UI in the app and `runa import` |
+| Backends: local JSON, Google Sheets (service account, atomic batch writes, per-cell conflicts, history) | Done; one contract test suite runs against both. Google Sheets is tested against an in-memory twin of the API; **not yet run against a live sheet** |
+| AI: Claude, OpenAI, Gemini, OpenAI-compatible; validation and one retry | Done, tested with recorded request shapes; **not yet run against live APIs** |
+| `runa` CLI and MCP server | Done; exercised end to end against a local project |
+| Runa for Mac | Done: keys, inspector, languages, review, activity, import, export, translate, settings, onboarding, command palette. Visually checked in light and dark |
+| Figma plugin | See figma-plugin/README.md |
+| Distribution | CI and release workflows written; **untested until pushed to GitHub**. Sparkle updates, Homebrew tap, Figma Community listing and the GitHub backend are not started |
+
+Deviations from the plan below: the app caches snapshots as JSON files instead of SwiftData
+(simpler, same behaviour), and the glossary and style guides are stored per Mac rather than in
+the sheet. The `_context` tab gained a `frameId` column so the app can screenshot the whole frame.
 
 Runa is a local-first **Mac app** for managing UI strings across iOS, Android and web.
 Strings live in a backend the user owns (Google Sheets first), a **Figma plugin** attaches a
@@ -254,8 +274,8 @@ The Mac app also exports the same files through a save panel for ad-hoc use.
 
 ## 7. Runa for Mac
 
-**Stack.** SwiftUI on macOS 15+, Swift 6 strict concurrency, `@Observable` view models, SwiftData
-for the local cache, `URLSession` only. Local-first: the app keeps the last snapshot and a queue
+**Stack.** SwiftUI on macOS 15+, Swift 6 strict concurrency, `@Observable` view models, a JSON
+file cache per project, `URLSession` only. Local-first: the app keeps the last snapshot and a queue
 of pending changes, so it is instant to browse and conflicts are detected per cell, never
 silently resolved.
 

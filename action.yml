@@ -1,0 +1,46 @@
+name: Runa
+description: Run the runa CLI in CI, for example `runa check` to fail on missing translations.
+branding:
+  icon: globe
+  color: purple
+inputs:
+  command:
+    description: Arguments for runa, for example "check" or "pull --dry-run".
+    default: check
+  version:
+    description: Release tag of runa to use, or "latest".
+    default: latest
+  config:
+    description: Path to runa.yml. Defaults to the nearest one.
+    default: ""
+runs:
+  using: composite
+  steps:
+    - name: Download runa
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        VERSION: ${{ inputs.version }}
+        REPO: ${{ github.action_repository }}
+      run: |
+        set -euo pipefail
+        case "$RUNNER_OS" in
+          macOS) asset="runa-macos-universal" ;;
+          Linux) asset="runa-linux-$(uname -m)" ;;
+          *) echo "Unsupported runner: $RUNNER_OS"; exit 1 ;;
+        esac
+        mkdir -p "$RUNNER_TEMP/runa-bin"
+        if [ "$VERSION" = "latest" ]; then
+          gh release download --repo "$REPO" --pattern "$asset" --dir "$RUNNER_TEMP/runa-bin"
+        else
+          gh release download "$VERSION" --repo "$REPO" --pattern "$asset" --dir "$RUNNER_TEMP/runa-bin"
+        fi
+        mv "$RUNNER_TEMP/runa-bin/$asset" "$RUNNER_TEMP/runa-bin/runa"
+        chmod +x "$RUNNER_TEMP/runa-bin/runa"
+        echo "$RUNNER_TEMP/runa-bin" >> "$GITHUB_PATH"
+    - name: runa ${{ inputs.command }}
+      shell: bash
+      env:
+        CONFIG: ${{ inputs.config }}
+      run: |
+        if [ -n "$CONFIG" ]; then runa ${{ inputs.command }} --config "$CONFIG"; else runa ${{ inputs.command }}; fi

@@ -1,0 +1,5 @@
+_id,key,description,plural,en,sv,figma,tags,platforms
+,welcome.title,Large title on the first screen,,Welcome to {appName},Välkommen till {appName},,onboarding,
+,cart.items,Badge on the cart icon,one,{count:int} item,{count:int} vara,,,
+,cart.items,Badge on the cart icon,other,{count:int} items,{count:int} varor,,,
+,checkout.pay,Primary button on the checkout screen,,Pay {amount},Betala {amount},,checkout,
