@@ -39,7 +39,7 @@ your Figma designs, and drafts translations with the AI provider you already use
 **Mac app.** Download `Runa.dmg` from the [latest release](../../releases/latest), or build it:
 
 ```sh
-git clone https://github.com/<you>/runa.git
+git clone https://github.com/alexnorrman/runa.git
 open runa/Apps/Runa/Runa.xcodeproj   # then Product → Run
 ```
 
@@ -141,7 +141,7 @@ writes from Settings → Command Line.
 **CI.** Use the action in this repository:
 
 ```yaml
-- uses: <you>/runa@v0
+- uses: alexnorrman/runa@v0
   with:
     command: check
   env:
