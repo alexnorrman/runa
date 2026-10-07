@@ -1,0 +1,16 @@
+.DS_Store
+/.build
+/.swiftpm
+/Packages
+xcuserdata/
+DerivedData/
+*.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/
+Apps/Runa/Runa.xcodeproj
+/build
+node_modules/
+figma-plugin/dist/
+*.p8
+*.p12
+service-account*.json
+credentials*.json
+.env
