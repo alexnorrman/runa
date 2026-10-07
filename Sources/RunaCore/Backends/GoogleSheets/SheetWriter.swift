@@ -229,7 +229,8 @@ enum SheetWriter {
                     .serialized(style: .standard).split(separator: "\n").map { $0.trimmingCharacters(in: .whitespaces) }.joined()
                 let row = [key.id.lowercased, context.url, context.fileKey, context.nodeId, context.pageName ?? "", context.frameName ?? "",
                            context.nodePath ?? "", number(context.width), number(context.height), number(context.fontSize),
-                           context.siblingTexts.isEmpty ? "" : siblings, context.linkedAt?.isoString ?? "", context.linkedBy ?? ""]
+                           context.siblingTexts.isEmpty ? "" : siblings, context.linkedAt?.isoString ?? "", context.linkedBy ?? "",
+                           context.frameId ?? ""]
                 rows.append(("\(key.id.lowercased)|\(context.url)", row))
             }
         }

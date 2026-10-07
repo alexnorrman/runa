@@ -204,7 +204,7 @@ let bob = PushContext(actor: "Bob", date: Date(timeIntervalSince1970: 1_790_000_
         let key = StringKey(key: "k", translations: ["en": Translation("Pay now")])
         let snapshot = try await backend.push([.addKey(key)], basedOn: try await backend.pull(), context: alice).snapshot
         let context = FigmaContext(url: "https://www.figma.com/design/AbC123/Shop?node-id=12-34", fileKey: "AbC123", nodeId: "12:34",
-                                   pageName: "Checkout", frameName: "Summary", nodePath: "Summary/Footer/Button", width: 120, height: 44,
+                                   frameId: "10:1", pageName: "Checkout", frameName: "Summary", nodePath: "Summary/Footer/Button", width: 120, height: 44,
                                    fontSize: 15, siblingTexts: ["Total", "Back"], linkedAt: alice.date, linkedBy: "Alice")
         _ = try await backend.push([.setContexts(id: key.id, contexts: [context])], basedOn: snapshot, context: alice)
         let read = try #require(try await backend.pull()[id: key.id]?.contexts.first)

@@ -6,6 +6,8 @@ public struct FigmaContext: Hashable, Codable, Sendable {
     public var fileKey: String
     /// Node id in API form, `12:34`.
     public var nodeId: String
+    /// The top-level frame containing the node, API form. Rendered as a screenshot for context.
+    public var frameId: String?
     public var pageName: String?
     public var frameName: String?
     public var nodePath: String?
@@ -17,13 +19,14 @@ public struct FigmaContext: Hashable, Codable, Sendable {
     public var linkedBy: String?
 
     public init(
-        url: String, fileKey: String, nodeId: String, pageName: String? = nil, frameName: String? = nil,
+        url: String, fileKey: String, nodeId: String, frameId: String? = nil, pageName: String? = nil, frameName: String? = nil,
         nodePath: String? = nil, width: Double? = nil, height: Double? = nil, fontSize: Double? = nil,
         siblingTexts: [String] = [], linkedAt: Date? = nil, linkedBy: String? = nil
     ) {
         self.url = url
         self.fileKey = fileKey
         self.nodeId = nodeId
+        self.frameId = frameId
         self.pageName = pageName
         self.frameName = frameName
         self.nodePath = nodePath

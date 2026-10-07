@@ -23,7 +23,7 @@ let package = Package(
                 .product(name: "_CryptoExtras", package: "swift-crypto"),
             ]
         ),
-        .target(name: "RunaDesign"),
+        .target(name: "RunaDesign", dependencies: ["RunaCore"], resources: [.copy("Resources/Fonts")]),
         .executableTarget(
             name: "RunaCLI",
             dependencies: [

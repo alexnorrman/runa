@@ -22,7 +22,7 @@ public enum SheetLayout {
     public static let metaHeader = ["key", "value"]
     public static let statusHeader = ["id", "locale", "status", "hash", "sourceHash", "updatedAt", "updatedBy"]
     public static let contextHeader = ["id", "url", "fileKey", "nodeId", "page", "frame", "path", "width", "height", "fontSize",
-                                       "siblings", "linkedAt", "linkedBy"]
+                                       "siblings", "linkedAt", "linkedBy", "frameId"]
     public static let historyHeader = ["ts", "actor", "action", "id", "key", "locale", "plural", "before", "after", "note"]
 
     public static func header(for tab: String) -> [String] {
@@ -195,6 +195,7 @@ enum SheetCodec {
             }
             context.linkedAt = Date(isoString: cell(row, contextColumns["linkedAt"]))
             context.linkedBy = nonEmpty(cell(row, contextColumns["linkedBy"]))
+            context.frameId = nonEmpty(cell(row, contextColumns["frameId"]))
             contexts[id, default: []].append(context)
         }
 

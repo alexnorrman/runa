@@ -77,9 +77,11 @@ hex characters. A plain key is the single form `other`.
 
 ## `_context`
 
-Header: `id | url | fileKey | nodeId | page | frame | path | width | height | fontSize | siblings | linkedAt | linkedBy`
+Header: `id | url | fileKey | nodeId | page | frame | path | width | height | fontSize | siblings | linkedAt | linkedBy | frameId`
 
-One row per (key, Figma node). `nodeId` uses API form `12:34`. `siblings` is a JSON array of up to
+One row per (key, Figma node). `nodeId` and `frameId` use API form `12:34`. `frameId` is the top-level
+frame under the page that contains the text; the Mac app renders it through the Figma REST API as a
+screenshot for translators and AI. Empty when the text is not inside a frame. `siblings` is a JSON array of up to
 10 strings (each at most 200 characters) from other text layers in the same frame. Numbers are
 plain decimals. The `figma` column in `strings` lists the same URLs for people; a URL that appears
 only there is read as a context with just `url`, `fileKey` and `nodeId`.
