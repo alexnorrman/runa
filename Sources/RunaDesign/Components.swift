@@ -415,3 +415,117 @@ public struct HairlineDivider: View {
         Rectangle().fill(RunaColor.borderSubtle).frame(height: 1)
     }
 }
+
+// MARK: Placeholder-aware text
+
+/// Text with `{placeholders}` tinted, so variables stand out from copy.
+public struct PlaceholderText: View {
+    let text: String
+    let font: Font
+    let color: Color
+    let placeholderColor: Color
+
+    public init(_ text: String, font: Font = RunaFont.body, color: Color = RunaColor.textPrimary, placeholderColor: Color = RunaColor.accent) {
+        self.text = text
+        self.font = font
+        self.color = color
+        self.placeholderColor = placeholderColor
+    }
+
+    public var body: some View {
+        Text(attributed).font(font)
+    }
+
+    var attributed: AttributedString {
+        var result = AttributedString()
+        for segment in CanonicalText.parse(text) {
+            switch segment {
+            case .literal(let literal):
+                var part = AttributedString(literal)
+                part.foregroundColor = color
+                result += part
+            case .placeholder(let placeholder):
+                var part = AttributedString("{\(placeholder.name)}")
+                part.foregroundColor = placeholderColor
+                result += part
+            }
+        }
+        return result
+    }
+}
+
+/// A sidebar row with Linear's quiet hover and selection instead of the system highlight.
+public struct SidebarRow<Leading: View, Trailing: View>: View {
+    let title: String
+    let isSelected: Bool
+    let action: () -> Void
+    let leading: Leading
+    let trailing: Trailing
+
+    public init(_ title: String, isSelected: Bool, action: @escaping () -> Void, @ViewBuilder leading: () -> Leading,
+                @ViewBuilder trailing: () -> Trailing)
+    {
+        self.title = title
+        self.isSelected = isSelected
+        self.action = action
+        self.leading = leading()
+        self.trailing = trailing()
+    }
+
+    public var body: some View {
+        Button(action: action) {
+            HoverReader { hovering in
+                HStack(spacing: RunaSpacing.s) {
+                    leading.frame(width: 18)
+                    Text(title)
+                        .font(isSelected ? RunaFont.bodyMedium : RunaFont.body)
+                        .foregroundStyle(isSelected ? RunaColor.textPrimary : RunaColor.textSecondary)
+                        .lineLimit(1)
+                    Spacer(minLength: 4)
+                    trailing
+                }
+                .padding(.horizontal, 8)
+                .frame(height: 28)
+                .background(RoundedRectangle(cornerRadius: RunaRadius.control)
+                    .fill(isSelected ? RunaColor.borderStrong : hovering ? RunaColor.hover : .clear))
+                .contentShape(Rectangle())
+            }
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+// MARK: Checkbox
+
+/// A small square checkbox in Runa's accent, used instead of the system checkbox so it matches
+/// the rest of the UI in light and dark.
+public struct RunaCheckboxStyle: ToggleStyle {
+    public init() {}
+
+    public func makeBody(configuration: Configuration) -> some View {
+        Button {
+            configuration.isOn.toggle()
+        } label: {
+            HStack(spacing: 7) {
+                RoundedRectangle(cornerRadius: 4)
+                    .fill(configuration.isOn ? RunaColor.accent : RunaColor.panel)
+                    .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(configuration.isOn ? RunaColor.accent : RunaColor.borderStrong, lineWidth: 1))
+                    .overlay {
+                        if configuration.isOn {
+                            Image(systemName: "checkmark").font(.system(size: 8.5, weight: .bold)).foregroundStyle(.white)
+                        }
+                    }
+                    .frame(width: 14, height: 14)
+                configuration.label
+                    .foregroundStyle(RunaColor.textSecondary)
+            }
+            .contentShape(Rectangle())
+            .animation(RunaMotion.quick, value: configuration.isOn)
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+extension ToggleStyle where Self == RunaCheckboxStyle {
+    public static var runaCheckbox: RunaCheckboxStyle { RunaCheckboxStyle() }
+}

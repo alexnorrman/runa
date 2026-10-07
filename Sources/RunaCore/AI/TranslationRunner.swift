@@ -47,6 +47,8 @@ public struct TranslationRunner: Sendable {
         public var failures: [Failure] = []
         public var usage = TranslationUsage()
 
+        public init() {}
+
         public var draftCount: Int { drafts.values.reduce(0) { $0 + $1.count } }
 
         /// Changes that store every draft as a machine translation awaiting review.

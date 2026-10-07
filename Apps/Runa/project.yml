@@ -1,0 +1,64 @@
+# Source of truth for Runa.xcodeproj. Regenerate with `xcodegen` after changing this file.
+name: Runa
+options:
+  bundleIdPrefix: app.runa
+  deploymentTarget:
+    macOS: "15.0"
+  createIntermediateGroups: true
+  developmentLanguage: en
+packages:
+  Runa:
+    path: ../..
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+targets:
+  Runa:
+    type: application
+    platform: macOS
+    sources:
+      - path: Sources
+      - path: Resources
+    dependencies:
+      - package: Runa
+        product: RunaCore
+      - package: Runa
+        product: RunaDesign
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.runa.Runa
+        PRODUCT_NAME: Runa
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: Runa
+        INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.developer-tools
+        INFOPLIST_KEY_NSHumanReadableCopyright: "Copyright © 2026 Alex Norrman. MIT License."
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        ENABLE_HARDENED_RUNTIME: YES
+        ENABLE_APP_SANDBOX: NO
+        ENABLE_USER_SCRIPT_SANDBOXING: NO
+        CODE_SIGN_STYLE: Automatic
+        CODE_SIGN_IDENTITY: "-"
+        COMBINE_HIDPI_IMAGES: YES
+        SWIFT_STRICT_CONCURRENCY: complete
+    postBuildScripts:
+      - name: Bundle runa command line tool
+        basedOnDependencyAnalysis: false
+        script: |
+          # Copies the `runa` CLI into Runa.app/Contents/Helpers so Settings can install it.
+          # Release builds compile it; debug builds use .build/debug/runa when present.
+          set -e
+          PACKAGE_DIR="$SRCROOT/../.."
+          HELPERS="$TARGET_BUILD_DIR/$CONTENTS_FOLDER_PATH/Helpers"
+          mkdir -p "$HELPERS"
+          if [ "$CONFIGURATION" = "Release" ]; then
+            (cd "$PACKAGE_DIR" && env -i PATH="/usr/bin:/bin:/usr/sbin:/sbin" HOME="$HOME" xcrun swift build -c release --product runa --arch arm64 --arch x86_64)
+            cp "$PACKAGE_DIR/.build/apple/Products/Release/runa" "$HELPERS/runa"
+          elif [ -x "$PACKAGE_DIR/.build/debug/runa" ]; then
+            cp "$PACKAGE_DIR/.build/debug/runa" "$HELPERS/runa"
+          fi
+          if [ -f "$HELPERS/runa" ]; then
+            codesign --force --sign "${EXPANDED_CODE_SIGN_IDENTITY:--}" --options runtime "$HELPERS/runa" || true
+          fi
