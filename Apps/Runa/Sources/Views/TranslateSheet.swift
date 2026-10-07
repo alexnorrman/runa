@@ -110,7 +110,9 @@ struct TranslateSheet: View {
         .onAppear {
             locales = Set(scope.locales.isEmpty ? store.snapshot?.settings.targetLocales ?? [] : scope.locales)
             overwrite = scope.keyIDs != nil && store.snapshot.map { snapshot in
-                keyIDs.allSatisfy { id in snapshot.settings.targetLocales.allSatisfy { snapshot.status(of: snapshot[id: id]!, locale: $0) != .missing } }
+                keyIDs.compactMap { snapshot[id: $0] }.allSatisfy { key in
+                    snapshot.settings.targetLocales.allSatisfy { snapshot.status(of: key, locale: $0) != .missing }
+                }
             } ?? false
         }
     }

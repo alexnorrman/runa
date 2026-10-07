@@ -121,7 +121,7 @@ struct KeyTable: View {
                 LazyVStack(spacing: 0) {
                     ForEach(keys) { key in
                         let selected = store.selection.contains(key.id)
-                        KeyRow(key: key, snapshot: store.snapshot!)
+                        KeyRow(key: key, snapshot: store.snapshot!, statuses: store.statusIndex)
                             .background(
                                 RoundedRectangle(cornerRadius: RunaRadius.control)
                                     .fill(selected ? (focused ? RunaColor.selected : RunaColor.hover) : hovered == key.id ? RunaColor.hover.opacity(0.6) : .clear)
@@ -199,6 +199,7 @@ struct KeyTable: View {
 struct KeyRow: View {
     let key: StringKey
     let snapshot: Snapshot
+    let statuses: StatusIndex
 
     var body: some View {
         let source = snapshot.settings.sourceLocale
@@ -229,9 +230,9 @@ struct KeyRow: View {
             }
             HStack(spacing: 10) {
                 ForEach(snapshot.settings.targetLocales, id: \.self) { locale in
-                    StatusDot(snapshot.status(of: key, locale: locale))
+                    StatusDot(statuses.status(key.id, locale))
                         .frame(width: 18)
-                        .help("\(locale.displayName()): \(snapshot.status(of: key, locale: locale).displayName)")
+                        .help("\(locale.displayName()): \(statuses.status(key.id, locale).displayName)")
                 }
             }
         }

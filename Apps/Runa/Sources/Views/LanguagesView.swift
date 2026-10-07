@@ -41,7 +41,7 @@ struct LanguagesView: View {
     }
 
     func row(_ locale: LocaleCode, snapshot: Snapshot) -> some View {
-        let coverage = snapshot.coverage(for: locale)
+        let coverage = store.statusIndex.coverage(for: locale)
         let isSource = locale == snapshot.settings.sourceLocale
         return Card {
             HStack(spacing: RunaSpacing.l) {

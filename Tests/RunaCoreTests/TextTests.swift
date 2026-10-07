@@ -198,3 +198,19 @@ import Testing
         #expect(TextHash.uuid(forKey: "a.b").lowercased.dropFirst(14).first == "5")
     }
 }
+
+@Suite struct StatusIndexTests {
+    @Test func matchesSnapshotStatuses() {
+        var snapshot = Sample.snapshot
+        snapshot.keys[snapshot.index(of: Sample.checkoutID)!].translations["en"] = Translation("Check out")
+        let index = StatusIndex(snapshot)
+        for key in snapshot.keys {
+            for locale in snapshot.settings.locales {
+                #expect(index.status(key.id, locale) == snapshot.status(of: key, locale: locale), "\(key.key) \(locale)")
+            }
+        }
+        for locale in snapshot.settings.locales {
+            #expect(index.coverage(for: locale) == snapshot.coverage(for: locale))
+        }
+    }
+}

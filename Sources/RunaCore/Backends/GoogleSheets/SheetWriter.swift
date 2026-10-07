@@ -20,9 +20,46 @@ enum SheetWriter {
                                       desired: contextRows(target: target, touched: touched), touched: touched)
         }
         if let tab = decoded.info.tab(SheetLayout.historyTab), !history.isEmpty {
-            requests.append(.appendRows(sheetID: tab.sheetID, rows: history.map(historyRow)))
+            let grid = decoded.grids[SheetLayout.historyTab] ?? []
+            let plan = headerPlan(tab: tab, grid: grid, canonical: SheetLayout.historyHeader)
+            requests += plan.requests
+            requests.append(.appendRows(sheetID: tab.sheetID, rows: history.map { plan.arrange(historyRow($0)) }))
         }
         return requests
+    }
+
+    /// Where each canonical column sits in a hidden tab, adding any column the tab's header lacks
+    /// (for example `frameId` in sheets created before it existed) at the end of the header.
+    struct HeaderPlan {
+        var requests: [SheetRequest]
+        var columns: [String: Int]
+        var canonical: [String]
+        var width: Int
+
+        /// Places a row given in canonical order into this tab's column order.
+        func arrange(_ row: [String]) -> [String] {
+            var cells = Array(repeating: "", count: width)
+            for (index, name) in canonical.enumerated() where index < row.count {
+                if let column = columns[name] { cells[column] = row[index] }
+            }
+            while let last = cells.last, last.isEmpty { cells.removeLast() }
+            return cells
+        }
+    }
+
+    static func headerPlan(tab: TabInfo, grid: [[String]], canonical: [String]) -> HeaderPlan {
+        let header = grid.first ?? []
+        var columns = SheetCodec.headerIndexes(header)
+        let missing = canonical.filter { columns[$0] == nil }
+        var requests: [SheetRequest] = []
+        if !missing.isEmpty {
+            let start = header.count
+            let needed = start + missing.count - tab.columnCount
+            if needed > 0 { requests.append(.insertColumns(sheetID: tab.sheetID, at: tab.columnCount, count: needed)) }
+            requests.append(.updateCells(sheetID: tab.sheetID, row: 0, column: start, rows: [missing]))
+            for (offset, name) in missing.enumerated() { columns[name] = start + offset }
+        }
+        return HeaderPlan(requests: requests, columns: columns, canonical: canonical, width: header.count + missing.count)
     }
 
     // MARK: strings
@@ -144,7 +181,8 @@ enum SheetWriter {
         for (locale, index) in columns.locales {
             cells[index] = key.translations[locale]?.forms[category ?? .other] ?? ""
         }
-        set(columns.figma, key.contexts.map(\.url).joined(separator: "\n"))
+        // Figma links live on a key's first row; readers collect them from every row.
+        set(columns.figma, isFirst ? key.contexts.map(\.url).joined(separator: "\n") : "")
         set(columns.tags, key.tags.joined(separator: ", "))
         set(columns.platforms, key.platforms.map(\.rawValue).joined(separator: ", "))
         while let last = cells.last, last.isEmpty, cells.count > columns.width { cells.removeLast() }
@@ -166,17 +204,10 @@ enum SheetWriter {
                               owner: ([String], [String: Int]) -> UUID?, desired: [(identity: String, row: [String])],
                               touched: Set<UUID>) -> [SheetRequest]
     {
-        let existingHeader = grid.first ?? header
-        let columns = SheetCodec.headerIndexes(existingHeader)
         // Desired rows are in canonical header order; map them onto this sheet's column order.
-        func arrange(_ row: [String]) -> [String] {
-            var cells = Array(repeating: "", count: max(existingHeader.count, header.count))
-            for (index, name) in header.enumerated() {
-                cells[columns[name] ?? index] = row[index]
-            }
-            while let last = cells.last, last.isEmpty { cells.removeLast() }
-            return cells
-        }
+        let plan = headerPlan(tab: tab, grid: grid, canonical: header)
+        let columns = plan.columns
+        let arrange = plan.arrange
         var wanted: [String: [String]] = [:]
         var wantedOrder: [String] = []
         for item in desired where wanted[item.identity] == nil {
@@ -197,7 +228,7 @@ enum SheetWriter {
                 operations.append((index, .deleteRows(sheetID: tab.sheetID, start: index, end: index + 1)))
             }
         }
-        var requests = operations.sorted { $0.row > $1.row }.map(\.request)
+        var requests = plan.requests + operations.sorted { $0.row > $1.row }.map(\.request)
         let newRows = wantedOrder.filter { !present.contains($0) }.compactMap { wanted[$0] }
         if !newRows.isEmpty { requests.append(.appendRows(sheetID: tab.sheetID, rows: newRows)) }
         return requests

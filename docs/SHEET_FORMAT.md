@@ -38,7 +38,8 @@ New locale columns are inserted after the last locale column.
 
 **Rows of one key.** Rows with the same `_id` belong to one key. Plural keys have one row per form;
 `key`, `description`, `tags`, `platforms` repeat on each row and are read from the first non-empty
-cell. A row whose `plural` cell is blank in a plural group is the `other` form.
+cell. `figma` is written on the key's first row only; readers collect URLs from every row. A row
+whose `plural` cell is blank in a plural group is the `other` form.
 
 **Derived ids.** A row with a blank `_id` gets `uuid(sha256("runa:key:" + key))`: the first 16 bytes
 of the SHA-256 digest of the UTF-8 string, with `byte[6] = (byte[6] & 0x0F) | 0x50` and
@@ -103,6 +104,8 @@ Append-only. `action` is one of `add-key`, `update-key`, `delete-key`, `set-valu
 - Before overwriting a cell, compare it with the value you based your edit on. If it changed and
   differs from your new value, report a conflict instead of writing.
 - Append one `_history` row per change.
+- Place cells in hidden tabs by header name. If a tab's header lacks a column you need to write
+  (an older sheet without `frameId`, say), add the header cell at the end of row 1 in the same batch.
 
 ## Test vectors
 

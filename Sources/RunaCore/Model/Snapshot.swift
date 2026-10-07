@@ -81,8 +81,13 @@ public struct Snapshot: Hashable, Codable, Sendable {
     /// - A translation whose recorded source hash differs from the current source text is
     ///   `.needsReview`, unless it is already a machine draft.
     public func status(of key: StringKey, locale: LocaleCode) -> TranslationStatus {
+        status(of: key, locale: locale, sourceHash: nil)
+    }
+
+    /// Same as `status(of:locale:)`, reusing a source hash the caller already computed.
+    func status(of key: StringKey, locale: LocaleCode, sourceHash knownHash: String?) -> TranslationStatus {
         if key.doNotTranslate && locale != settings.sourceLocale {
-            return status(of: key, locale: settings.sourceLocale)
+            return status(of: key, locale: settings.sourceLocale, sourceHash: knownHash)
         }
         guard let translation = key.translations[locale] else { return .missing }
         for category in requiredCategories(for: key, locale: locale) {
@@ -90,7 +95,7 @@ public struct Snapshot: Hashable, Codable, Sendable {
         }
         if locale == settings.sourceLocale { return .approved }
         if translation.status == .approved || translation.status == .needsReview,
-            let recorded = translation.sourceHash, let current = sourceHash(of: key), recorded != current
+            let recorded = translation.sourceHash, let current = knownHash ?? sourceHash(of: key), recorded != current
         {
             return .needsReview
         }

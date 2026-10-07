@@ -224,7 +224,7 @@ struct KeyDetailView: View {
         var newTags = tags.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
         if key.doNotTranslate { newTags.append(StringKey.doNotTranslateTag) }
         metadata.tags = newTags
-        guard metadata != key.metadata else { return }
+        guard metadata.description != key.description || Set(metadata.tags) != Set(key.tags) else { return }
         store.perform([.updateKey(id: key.id, metadata: metadata)])
     }
 
@@ -351,6 +351,7 @@ struct FormEditor: View {
                 }
             }
             .onChange(of: stored) { _, newValue in text = newValue }
+            .onDisappear { commit() }
             .overlay(alignment: .bottomTrailing) {
                 if let problem = placeholderProblem {
                     Image(systemName: "exclamationmark.triangle.fill")

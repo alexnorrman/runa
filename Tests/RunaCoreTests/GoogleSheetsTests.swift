@@ -171,3 +171,42 @@ import Testing
         #expect(throws: BackendError.self) { try ServiceAccountCredentials(json: Data("hello".utf8)) }
     }
 }
+
+@Suite struct SheetWriterAlignmentTests {
+    @Test func addsColumnsMissingFromOlderSheets() async throws {
+        let api = InMemorySheetsAPI()
+        await api.create(id: "sheet")
+        let backend = GoogleSheetsBackend(spreadsheetID: "sheet", api: api)
+        _ = try await backend.setUp(sourceLocale: "en", context: alice)
+        // Simulate a sheet created before frameId existed: drop the last header cell.
+        let header = await api.grid(id: "sheet", tab: "_context")[0]
+        #expect(header.last == "frameId")
+        try await api.setCell(id: "sheet", tab: "_context", row: 0, column: header.count - 1, value: "")
+
+        let key = StringKey(key: "k", translations: ["en": Translation("Pay")])
+        let snapshot = try await backend.push([.addKey(key)], basedOn: try await backend.pull(), context: alice).snapshot
+        let context = FigmaContext(url: "https://www.figma.com/design/F/App?node-id=1-2", fileKey: "F", nodeId: "1:2", frameId: "1:1")
+        _ = try await backend.push([.setContexts(id: key.id, contexts: [context])], basedOn: snapshot, context: alice)
+
+        let grid = await api.grid(id: "sheet", tab: "_context")
+        #expect(grid[0].last == "frameId")
+        #expect(grid[1][grid[0].count - 1] == "1:1")
+        #expect(try await backend.pull()[id: key.id]?.contexts.first?.frameId == "1:1")
+    }
+
+    @Test func figmaLinksGoOnTheFirstRowOfAPluralKey() async throws {
+        let api = InMemorySheetsAPI()
+        await api.create(id: "sheet")
+        let backend = GoogleSheetsBackend(spreadsheetID: "sheet", api: api)
+        var snapshot = try await backend.setUp(sourceLocale: "en", context: alice)
+        let key = StringKey(key: "files", isPlural: true, translations: ["en": Translation(forms: [.one: "1 file", .other: "{n:int} files"])])
+        snapshot = try await backend.push([.addKey(key)], basedOn: snapshot, context: alice).snapshot
+        let context = FigmaContext(url: "https://www.figma.com/design/F/App?node-id=3-4", fileKey: "F", nodeId: "3:4")
+        _ = try await backend.push([.setContexts(id: key.id, contexts: [context])], basedOn: snapshot, context: alice)
+        let grid = await api.grid(id: "sheet", tab: "strings")
+        let figmaColumn = grid[0].firstIndex(of: "figma")!
+        let cells = grid.dropFirst().map { $0.count > figmaColumn ? $0[figmaColumn] : "" }
+        #expect(cells == [context.url, ""])
+        #expect(try await backend.pull()[id: key.id]?.contexts.map(\.url) == [context.url])
+    }
+}

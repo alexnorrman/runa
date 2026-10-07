@@ -24,7 +24,7 @@ struct SidebarView: View {
                     if let snapshot = store.snapshot, !snapshot.settings.targetLocales.isEmpty {
                         header("Languages")
                         ForEach(snapshot.settings.locales, id: \.self) { locale in
-                            let coverage = snapshot.coverage(for: locale)
+                            let coverage = store.statusIndex.coverage(for: locale)
                             SidebarRow(locale.displayName(), isSelected: store.sidebar == .keys(.missing(locale))) {
                                 store.sidebar = .keys(.missing(locale))
                             } leading: {

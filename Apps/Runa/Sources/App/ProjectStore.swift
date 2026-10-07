@@ -49,7 +49,11 @@ final class ProjectStore {
     /// State in the backend as of the last pull or push.
     private(set) var base: Snapshot?
     /// What the UI shows: `base` plus pending changes.
-    private(set) var snapshot: Snapshot?
+    private(set) var snapshot: Snapshot? {
+        didSet { statusIndex = snapshot.map(StatusIndex.init) ?? .empty }
+    }
+    /// Statuses and coverage for `snapshot`, computed once per change.
+    private(set) var statusIndex = StatusIndex.empty
     private(set) var pending: [Change] = []
     private(set) var syncState = SyncState.idle
     private(set) var lastSynced: Date?
@@ -90,6 +94,7 @@ final class ProjectStore {
             pending = cache.pending
             lastSynced = cache.lastSynced
             snapshot = Self.applyLocally(cache.pending, to: cache.base, actor: app.settings.displayName)
+            statusIndex = snapshot.map(StatusIndex.init) ?? .empty
         }
         Task { await refresh() }
         startAutoSync()
@@ -249,16 +254,17 @@ final class ProjectStore {
             keys = KeySearch.search(searchText, in: snapshot, limit: 500)
         }
         let locales = snapshot.settings.locales
+        let index = statusIndex
         switch filter {
         case .all: break
         case .missing(let locale):
             keys = keys.filter { key in
-                (locale.map { [$0] } ?? locales).contains { snapshot.status(of: key, locale: $0) == .missing }
+                (locale.map { [$0] } ?? locales).contains { index.status(key.id, $0) == .missing }
             }
         case .needsReview:
-            keys = keys.filter { key in locales.contains { snapshot.status(of: key, locale: $0) == .needsReview } }
+            keys = keys.filter { key in locales.contains { index.status(key.id, $0) == .needsReview } }
         case .machine:
-            keys = keys.filter { key in locales.contains { snapshot.status(of: key, locale: $0) == .machine } }
+            keys = keys.filter { key in locales.contains { index.status(key.id, $0) == .machine } }
         case .tag(let tag):
             keys = keys.filter { $0.tags.contains(tag) }
         }
@@ -281,13 +287,13 @@ final class ProjectStore {
     /// Locales with missing translations, most missing first.
     var missingByLocale: [(locale: LocaleCode, count: Int)] {
         guard let snapshot else { return [] }
-        return snapshot.settings.locales.map { ($0, snapshot.coverage(for: $0).missing) }.filter { $0.1 > 0 }.sorted { $0.1 > $1.1 }
+        return snapshot.settings.locales.map { ($0, statusIndex.coverage(for: $0).missing) }.filter { $0.1 > 0 }.sorted { $0.1 > $1.1 }
     }
 
     var reviewCount: Int {
         guard let snapshot else { return 0 }
         return snapshot.settings.targetLocales.reduce(0) { total, locale in
-            let coverage = snapshot.coverage(for: locale)
+            let coverage = statusIndex.coverage(for: locale)
             return total + coverage.machine + coverage.needsReview
         }
     }
