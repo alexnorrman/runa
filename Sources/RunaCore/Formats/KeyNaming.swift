@@ -49,3 +49,18 @@ public enum KeyNaming {
         return ([language] + parts.dropFirst()).joined(separator: "-")
     }
 }
+
+extension KeyNaming {
+    /// Why a key name is not acceptable, or nil when it is. Keys use letters, digits, `_` and `-`
+    /// in dot-separated segments: `checkout.summary.title`.
+    public static func problem(with key: String) -> String? {
+        if key.isEmpty { return "The key is empty." }
+        if key.count > 200 { return "Keys are limited to 200 characters." }
+        if key.hasPrefix(".") || key.hasSuffix(".") || key.contains("..") { return "Dots separate segments; a segment cannot be empty." }
+        let allowed = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-.")
+        if key.unicodeScalars.contains(where: { !allowed.contains($0) }) {
+            return "Use letters, digits, \"_\", \"-\" and \".\" only."
+        }
+        return nil
+    }
+}

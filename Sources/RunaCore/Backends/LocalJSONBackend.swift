@@ -4,7 +4,7 @@ import Foundation
 /// teams that keep strings in a repository.
 public actor LocalJSONBackend: StringsBackend {
     public nonisolated let kind = BackendKind.localJSON
-    public let url: URL
+    public nonisolated let url: URL
 
     struct FileContents: Codable {
         var format = "runa"

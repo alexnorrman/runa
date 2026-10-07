@@ -1,0 +1,14 @@
+{
+  "name": "Runa",
+  "id": "runa-strings",
+  "api": "1.0.0",
+  "editorType": ["figma"],
+  "main": "dist/code.js",
+  "ui": "dist/ui.html",
+  "documentAccess": "dynamic-page",
+  "enablePrivatePluginApi": true,
+  "networkAccess": {
+    "allowedDomains": ["https://sheets.googleapis.com", "https://oauth2.googleapis.com"],
+    "reasoning": "Reads and writes strings in your Google Sheet."
+  }
+}
