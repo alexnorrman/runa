@@ -1,0 +1,173 @@
+import _CryptoExtras
+import Crypto
+import Foundation
+import Testing
+@testable import RunaCore
+
+@Suite struct GoogleSheetsTests {
+    func makeBackend() async throws -> (GoogleSheetsBackend, InMemorySheetsAPI) {
+        let api = InMemorySheetsAPI()
+        await api.create(id: "sheet")
+        let backend = GoogleSheetsBackend(spreadsheetID: "sheet", api: api)
+        _ = try await backend.setUp(projectName: "Shop", sourceLocale: "en", locales: ["sv"], context: alice)
+        return (backend, api)
+    }
+
+    @Test func setUpLaysOutABlankSpreadsheet() async throws {
+        let (backend, api) = try await makeBackend()
+        let info = try await api.spreadsheet("sheet")
+        #expect(info.tabs.map(\.title) == ["strings", "_meta", "_status", "_context", "_history"])
+        #expect(info.tabs.filter(\.hidden).count == 4)
+        #expect(await api.grid(id: "sheet", tab: "strings") == [["_id", "key", "description", "plural", "en", "sv", "figma", "tags", "platforms"]])
+        #expect(await api.grid(id: "sheet", tab: "_meta") == [["key", "value"], ["schemaVersion", "1"], ["projectName", "Shop"], ["sourceLocale", "en"]])
+        let inspection = try await backend.inspect()
+        #expect(inspection.state == .ready(locales: ["en", "sv"], keyCount: 0))
+        #expect(try await backend.pull().settings.name == "Shop")
+    }
+
+    @Test func adoptsAHandMadeSheet() async throws {
+        let api = InMemorySheetsAPI()
+        await api.create(id: "sheet", tabs: ["strings": [["key", "en", "sv", "notes"], ["hello", "Hello", "Hej", "keep me"], ["bye", "Bye"]]])
+        let backend = GoogleSheetsBackend(spreadsheetID: "sheet", api: api)
+        let inspection = try await backend.inspect()
+        guard case .adoptable(let locales, let keyCount, let missing) = inspection.state else {
+            Issue.record("Expected an adoptable sheet, got \(inspection.state)")
+            return
+        }
+        #expect(locales == ["en", "sv"])
+        #expect(keyCount == 2)
+        #expect(missing.contains("_status"))
+
+        // Reading works before setup, with ids derived from key names.
+        let before = try await backend.pull()
+        #expect(before[id: TextHash.uuid(forKey: "hello")]?.value(for: "sv") == "Hej")
+
+        let snapshot = try await backend.setUp(sourceLocale: "en", context: alice)
+        #expect(snapshot.keys.count == 2)
+        let grid = await api.grid(id: "sheet", tab: "strings")
+        #expect(grid[0] == ["key", "en", "sv", "notes", "_id", "description", "plural", "figma", "tags", "platforms"])
+        #expect(grid[1][3] == "keep me")
+
+        // The first edit writes the derived id into the row and keeps the extra column.
+        let id = TextHash.uuid(forKey: "bye")
+        _ = try await backend.push([.setValue(id: id, locale: "sv", value: "Hejdå")], basedOn: snapshot, context: alice)
+        let after = await api.grid(id: "sheet", tab: "strings")
+        #expect(after[2][2] == "Hejdå")
+        #expect(after[2][4] == id.lowercased)
+        #expect(after[1][3] == "keep me")
+    }
+
+    @Test func handEditsInTheSheetReadAsApproved() async throws {
+        let (backend, api) = try await makeBackend()
+        let key = StringKey(key: "k", translations: ["en": Translation("Hello")])
+        var snapshot = try await backend.push([.addKey(key)], basedOn: try await backend.pull(), context: alice).snapshot
+        snapshot = try await backend.push([.setValue(id: key.id, locale: "sv", value: "Hallå", status: .machine)], basedOn: snapshot,
+                                          context: alice).snapshot
+        #expect(try await backend.pull().status(of: snapshot[id: key.id]!, locale: "sv") == .machine)
+
+        // A translator fixes the machine draft directly in Google Sheets.
+        try await api.setCell(id: "sheet", tab: "strings", row: 1, column: 5, value: "Hej")
+        let pulled = try await backend.pull()
+        #expect(pulled[id: key.id]?.value(for: "sv") == "Hej")
+        #expect(pulled.status(of: pulled[id: key.id]!, locale: "sv") == .approved)
+    }
+
+    @Test func survivesRowsInsertedByPeople() async throws {
+        let (backend, api) = try await makeBackend()
+        let first = StringKey(key: "first", translations: ["en": Translation("First")])
+        let second = StringKey(key: "second", translations: ["en": Translation("Second")])
+        let snapshot = try await backend.push([.addKey(first), .addKey(second)], basedOn: try await backend.pull(), context: alice).snapshot
+
+        // Someone inserts a row at the top between our pull and our push.
+        try await api.insertRow(id: "sheet", tab: "strings", at: 1, values: ["", "manual.key", "", "", "Manual"])
+        _ = try await backend.push([.setValue(id: second.id, locale: "sv", value: "Andra")], basedOn: snapshot, context: alice)
+        let pulled = try await backend.pull()
+        #expect(pulled[id: second.id]?.value(for: "sv") == "Andra")
+        #expect(pulled[id: first.id]?.value(for: "sv") == nil)
+        #expect(pulled.key(named: "manual.key")?.value(for: "en") == "Manual")
+    }
+
+    @Test func newPluralRowsStayNextToTheirKey() async throws {
+        let (backend, api) = try await makeBackend()
+        let plural = StringKey(key: "a.files", isPlural: true, translations: ["en": Translation(forms: [.one: "1 file", .other: "{n:int} files"])])
+        let later = StringKey(key: "b.later", translations: ["en": Translation("Later")])
+        var snapshot = try await backend.push([.addKey(plural), .addKey(later)], basedOn: try await backend.pull(), context: alice).snapshot
+        snapshot = try await backend.addLocale("pl", context: alice)
+        _ = try await backend.push([.setValue(id: plural.id, locale: "pl", category: .few, value: "{n:int} pliki", status: .approved)],
+                                   basedOn: snapshot, context: alice)
+        let grid = await api.grid(id: "sheet", tab: "strings")
+        let keyColumn = 1
+        let pluralColumn = 3
+        #expect(grid.dropFirst().map { $0[keyColumn] } == ["a.files", "a.files", "a.files", "a.files", "b.later"])
+        #expect(grid.dropFirst().map { $0.count > pluralColumn ? $0[pluralColumn] : "" } == ["one", "few", "many", "other", ""])
+        #expect(grid[2][6] == "{n:int} pliki")
+    }
+
+    @Test func oneBatchPerPush() async throws {
+        let (backend, api) = try await makeBackend()
+        let before = await api.batchCount
+        let keys = (0..<20).map { StringKey(key: "key.\($0)", translations: ["en": Translation("Value \($0)")]) }
+        _ = try await backend.push(keys.map(Change.addKey), basedOn: try await backend.pull(), context: alice)
+        #expect(await api.batchCount == before + 1)
+    }
+
+    @Test func readsFigmaLinksTypedByPeople() async throws {
+        let (backend, api) = try await makeBackend()
+        let key = StringKey(key: "k", translations: ["en": Translation("Pay")])
+        _ = try await backend.push([.addKey(key)], basedOn: try await backend.pull(), context: alice)
+        try await api.setCell(id: "sheet", tab: "strings", row: 1, column: 6, value: "https://www.figma.com/design/XyZ/App?node-id=1-2")
+        let context = try #require(try await backend.pull()[id: key.id]?.contexts.first)
+        #expect(context.fileKey == "XyZ")
+        #expect(context.nodeId == "1:2")
+    }
+
+    @Test func formulasAreWrittenAsText() {
+        let json = SheetRequest.updateCells(sheetID: 1, row: 0, column: 0, rows: [["=SUM(A1)", nil]]).json.serialized(style: .standard)
+        #expect(json.contains("\"stringValue\": \"=SUM(A1)\""))
+        #expect(json.contains("\"fields\": \"userEnteredValue\""))
+    }
+
+    @Test func parsesSpreadsheetLinks() {
+        #expect(GoogleSheetsBackend.spreadsheetID(from: "https://docs.google.com/spreadsheets/d/1AbC_def-GHIjklMNOpqrSTUvwxYZ0123456789/edit#gid=0")
+                == "1AbC_def-GHIjklMNOpqrSTUvwxYZ0123456789")
+        #expect(GoogleSheetsBackend.spreadsheetID(from: "1AbC_def-GHIjklMNOpqrSTUvwxYZ0123456789") == "1AbC_def-GHIjklMNOpqrSTUvwxYZ0123456789")
+        #expect(GoogleSheetsBackend.spreadsheetID(from: "not a link") == nil)
+    }
+
+    @Test func signsServiceAccountAssertions() throws {
+        let key = try _RSA.Signing.PrivateKey(keySize: .bits2048)
+        let credentials = ServiceAccountCredentials(privateKeyID: "kid-1", privateKey: key.pkcs8PEMRepresentation,
+                                                    clientEmail: "runa@project.iam.gserviceaccount.com")
+        // Round-trips through the JSON a user would drop on the app.
+        let parsed = try ServiceAccountCredentials(json: try credentials.jsonData())
+        #expect(parsed.clientEmail == credentials.clientEmail)
+
+        let jwt = try ServiceAccountTokenProvider.assertion(credentials: parsed, scopes: [ServiceAccountTokenProvider.spreadsheetsScope],
+                                                             now: Date(timeIntervalSince1970: 1_800_000_000))
+        let parts = jwt.split(separator: ".").map(String.init)
+        #expect(parts.count == 3)
+        func decode(_ part: String) throws -> JSONValue {
+            var base64 = part.replacingOccurrences(of: "-", with: "+").replacingOccurrences(of: "_", with: "/")
+            while base64.count % 4 != 0 { base64 += "=" }
+            return try JSONValue.parse(Data(base64Encoded: base64)!)
+        }
+        let header = try decode(parts[0])
+        let claims = try decode(parts[1])
+        #expect(header["alg"]?.stringValue == "RS256")
+        #expect(header["kid"]?.stringValue == "kid-1")
+        #expect(claims["iss"]?.stringValue == "runa@project.iam.gserviceaccount.com")
+        #expect(claims["aud"]?.stringValue == "https://oauth2.googleapis.com/token")
+        #expect(claims["exp"] == .number(1_800_003_600))
+
+        var signature = parts[2].replacingOccurrences(of: "-", with: "+").replacingOccurrences(of: "_", with: "/")
+        while signature.count % 4 != 0 { signature += "=" }
+        let valid = key.publicKey.isValidSignature(_RSA.Signing.RSASignature(rawRepresentation: Data(base64Encoded: signature)!),
+                                                   for: Data("\(parts[0]).\(parts[1])".utf8), padding: .insecurePKCS1v1_5)
+        #expect(valid)
+    }
+
+    @Test func rejectsFilesThatAreNotServiceAccounts() {
+        #expect(throws: BackendError.self) { try ServiceAccountCredentials(json: Data(#"{"type": "authorized_user"}"#.utf8)) }
+        #expect(throws: BackendError.self) { try ServiceAccountCredentials(json: Data("hello".utf8)) }
+    }
+}

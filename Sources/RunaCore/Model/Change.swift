@@ -38,6 +38,8 @@ public enum ConflictKind: String, Codable, Sendable, Hashable {
     case duplicateKey
     /// You deleted a key that someone else edited since you last pulled.
     case keyModified
+    /// The locale is not part of the project. Add the language first.
+    case unknownLocale
 }
 
 public struct Conflict: Hashable, Codable, Sendable, Identifiable {

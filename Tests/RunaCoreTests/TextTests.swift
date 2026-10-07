@@ -182,6 +182,15 @@ import Testing
         #expect(coverage.approved == 2)
     }
 
+    /// The Figma plugin computes the same values in TypeScript (figma-plugin/src/sheets/hash.test.ts).
+    @Test func crossLanguageVectors() {
+        #expect(TextHash.of(forms: [.other: "Hello"]) == "a8a7157e2918")
+        #expect(TextHash.of(forms: [.one: "{count:int} item", .other: "{count:int} items"]) == "28e56bf13e39")
+        #expect(TextHash.of(forms: [.other: "Hej då 👋"]) == "48a4dc59c479")
+        #expect(TextHash.uuid(forKey: "checkout.title").lowercased == "d286c840-69d2-5786-b77b-30b06363380d")
+        #expect(TextHash.uuid(forKey: "cart.items").lowercased == "31962844-99e1-5361-85d8-42d00b9b2191")
+    }
+
     @Test func hashesAreStable() {
         #expect(TextHash.of(forms: [.other: "Hello"]) == TextHash.of(forms: [.other: "Hello", .one: ""]))
         #expect(TextHash.of(forms: [.other: "Hello"]).count == 12)
