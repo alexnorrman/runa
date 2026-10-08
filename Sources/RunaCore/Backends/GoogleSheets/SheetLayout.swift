@@ -8,6 +8,10 @@ public enum SheetLayout {
     public static let contextTab = "_context"
     public static let historyTab = "_history"
     public static let hiddenTabs = [metaTab, statusTab, contextTab, historyTab]
+    /// Visible tabs people read and edit: the naming guide, key template and style guides, and the glossary.
+    public static let guidelinesTab = "guidelines"
+    public static let glossaryTab = "glossary"
+    public static let guidelineTabs = [guidelinesTab, glossaryTab]
 
     public static let idColumn = "_id"
     public static let keyColumn = "key"
@@ -24,6 +28,9 @@ public enum SheetLayout {
     public static let contextHeader = ["id", "url", "fileKey", "nodeId", "page", "frame", "path", "width", "height", "fontSize",
                                        "siblings", "linkedAt", "linkedBy", "frameId"]
     public static let historyHeader = ["ts", "actor", "action", "id", "key", "locale", "plural", "before", "after", "note"]
+    public static let guidelinesHeader = ["topic", "language", "value"]
+    /// Followed by one column per target language.
+    public static let glossaryHeader = ["term", "note"]
 
     public static func header(for tab: String) -> [String] {
         switch tab {
@@ -31,6 +38,8 @@ public enum SheetLayout {
         case statusTab: statusHeader
         case contextTab: contextHeader
         case historyTab: historyHeader
+        case guidelinesTab: guidelinesHeader
+        case glossaryTab: glossaryHeader
         default: []
         }
     }
@@ -255,9 +264,58 @@ enum SheetCodec {
             keys.append(key)
         }
 
+        let guidelines = decodeGuidelines(grids)
+        for problem in KeyNamingRules(guidelines).configurationProblems {
+            warnings.append(SnapshotWarning(problem, location: "\(SheetLayout.guidelinesTab) tab"))
+        }
+
         let missing = SheetLayout.hiddenTabs.filter { grids[$0] == nil }
-        let snapshot = Snapshot(settings: settings, keys: keys, fetchedAt: Date(), warnings: warnings)
+        let snapshot = Snapshot(settings: settings, keys: keys, guidelines: guidelines, fetchedAt: Date(), warnings: warnings)
         return DecodedSheet(info: info, snapshot: snapshot, columns: columns, stringsRows: rows, grids: grids, missingTabs: missing)
+    }
+
+    /// Reads the `guidelines` and `glossary` tabs. Missing tabs mean no guidelines.
+    static func decodeGuidelines(_ grids: [String: [[String]]]) -> ProjectGuidelines {
+        var guidelines = ProjectGuidelines()
+        let rows = grids[SheetLayout.guidelinesTab] ?? []
+        let header = (rows.first ?? []).map { $0.trimmingCharacters(in: .whitespaces).lowercased() }
+        let topic = header.firstIndex(of: "topic") ?? 0
+        let language = header.firstIndex(of: "language") ?? 1
+        let value = header.firstIndex(of: "value") ?? 2
+        func setOnce(_ text: inout String, _ new: String) { if text.isEmpty { text = new } }
+        for row in rows.dropFirst() {
+            let text = cell(row, value)
+            switch cell(row, topic).trimmingCharacters(in: .whitespaces).lowercased() {
+            case "naming": setOnce(&guidelines.naming, text)
+            case "keytemplate": setOnce(&guidelines.keyTemplate, text)
+            case "keypattern": setOnce(&guidelines.keyPattern, text)
+            case "style":
+                if let locale = LocaleCode(rawValue: cell(row, language).trimmingCharacters(in: .whitespaces)), guidelines.styleGuides[locale] == nil {
+                    guidelines.styleGuides[locale] = text
+                }
+            default: break
+            }
+        }
+
+        let glossary = grids[SheetLayout.glossaryTab] ?? []
+        let glossaryHeader = (glossary.first ?? []).map { $0.trimmingCharacters(in: .whitespaces) }
+        let term = glossaryHeader.firstIndex { $0.lowercased() == "term" } ?? 0
+        let note = glossaryHeader.firstIndex { ["note", "notes", "comment"].contains($0.lowercased()) }
+        var localeColumns: [(LocaleCode, Int)] = []
+        for (index, name) in glossaryHeader.enumerated() where index != term && index != note {
+            if let locale = LocaleCode(rawValue: name), locale.isKnownLanguage, !localeColumns.contains(where: { $0.0 == locale }) {
+                localeColumns.append((locale, index))
+            }
+        }
+        for row in glossary.dropFirst() {
+            let name = cell(row, term).trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !name.isEmpty else { continue }
+            var entry = GlossaryTerm(term: name, note: cell(row, note))
+            for (locale, index) in localeColumns { entry.translations[locale] = nonEmpty(cell(row, index)) }
+            entry.id = TextHash.uuid(forKey: "glossary:\(name)")
+            guidelines.glossary.append(entry)
+        }
+        return guidelines.normalized
     }
 
     static func headerIndexes(_ header: [String]) -> [String: Int] {

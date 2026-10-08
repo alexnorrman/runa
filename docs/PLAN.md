@@ -179,7 +179,7 @@ So the Google Sheets provider authenticates with a **service account** everywher
 | Client | How the credential gets there |
 |---|---|
 | Mac app | Setup wizard: create a Google Cloud project, enable the Sheets API, create a service account, download its JSON key, drop it on the app. Stored in the Keychain. The app shows the service account's email so the user can share the sheet with it like with a colleague, then runs **Test connection**. |
-| CLI / MCP | Path to the same JSON via `runa.yml` or `RUNA_GOOGLE_CREDENTIALS`, or written by the Mac app's "Install command line tool" into `~/Library/Application Support/Runa/credentials/` with `0600` permissions. |
+| CLI / MCP | Path to the same JSON via `runa.yml` or `RUNA_GOOGLE_CREDENTIALS`, or written by the Mac app's **Use for CLI** button (Settings → Command Line) to `~/.config/runa/google-service-account.json` with `0600` permissions. |
 | Figma plugin | Pasted once into the plugin's settings, stored in `figma.clientStorage` (per user, per machine). JWT signed with WebCrypto in the plugin iframe. |
 
 Signing in Swift uses `swift-crypto`'s RSA support so the same code runs in the app and in
@@ -452,7 +452,7 @@ The GitHub repository is the product. License: MIT (easy for others to clone and
 | Piece | How others get it |
 |---|---|
 | **Mac app** | Clone and build in Xcode, or download `Runa.dmg` from GitHub Releases. A GitHub Actions workflow on every tag archives, signs, notarizes and uploads the DMG. Notarization needs an Apple Developer Program membership (USD 99 a year); without it users must right-click → Open once, which the README explains. Optional `brew install --cask runa` from a tap, and Sparkle 2 for in-app updates fed by the Releases appcast. |
-| **CLI / MCP** | Bundled inside the app (`Runa.app/Contents/Helpers/runa`). Settings → **Install command line tool** symlinks it into `/usr/local/bin` (or `~/.local/bin` without admin), writes the credentials file, and shows the `claude mcp add runa -- runa mcp` line plus JSON for other MCP clients. Also a Homebrew formula and a GitHub Action for CI. |
+| **CLI / MCP** | Bundled inside the app (`Runa.app/Contents/Helpers/runa`). Settings → **Install command line tool** symlinks it into `~/.local/bin`, **Use for CLI** next to a service account writes the credentials file, and the same pane shows the `claude mcp add runa -- runa mcp` line plus JSON for other MCP clients. Also a Homebrew formula and a GitHub Action for CI. |
 | **Figma plugin** | Three paths, cheapest first. (1) **Import from manifest**: the built plugin folder is attached to every release; in Figma desktop, Plugins → Development → Import plugin from manifest. Works on every Figma plan, per user. (2) **From the Mac app**: Settings → **Install Figma plugin…** writes the bundled plugin folder to `~/Library/Application Support/Runa/figma-plugin/`, opens Figma, and shows the three-step import with the path on the clipboard. Figma has no API to register a development plugin, so the final click stays manual. (3) **Figma Community** (later, once stable): free, reviewed by Figma, public listing, one-click install for everyone; the plugin is still useless without the sheet credentials, so public listing is safe. Private _organisation_ publishing exists but requires a Figma Organization or Enterprise plan, so it is not the default path. |
 
 ---

@@ -52,7 +52,7 @@ struct Keys: AsyncParsableCommand {
     struct Add: AsyncParsableCommand {
         static let configuration = CommandConfiguration(abstract: "Add a key with its source-language text.")
         @OptionGroup var project: ProjectOptions
-        @Argument(help: "Key name, for example checkout.summary.title.") var key: String
+        @Argument(help: "Key name in the project's key format (see `runa guidelines`).") var key: String
         @Option(help: "Source-language text. Placeholders: {name}, {count:int}, {price:double}.") var text: String?
         @Option(help: "Context for translators.") var description = ""
         @Option(name: .customLong("one"), help: "Plural key: the singular form.") var one: String?
@@ -64,6 +64,8 @@ struct Keys: AsyncParsableCommand {
             if let problem = KeyNaming.problem(with: key) { throw ValidationError(problem) }
             let loaded = try project.load()
             let snapshot = try await loaded.backend.pull()
+            let rules = snapshot.namingRules
+            if let problem = rules.problem(with: key) { throw ValidationError("\(problem) See `runa guidelines`.") }
             let source = snapshot.settings.sourceLocale
             let translation: Translation
             let plural = one != nil || other != nil
@@ -74,12 +76,14 @@ struct Keys: AsyncParsableCommand {
                 guard let text, !text.isEmpty else { throw ValidationError("Pass --text, or --one and --other for a plural key") }
                 translation = Translation(text)
             }
-            let newKey = StringKey(key: key, description: description, tags: tags,
-                                   platforms: try platforms.map { raw in
-                                       guard let platform = Platform(rawValue: raw.lowercased()) else { throw ValidationError("Unknown platform \(raw)") }
-                                       return platform
-                                   },
-                                   isPlural: plural, translations: [source: translation])
+            var chosen = try platforms.map { raw in
+                guard let platform = Platform(rawValue: raw.lowercased()) else { throw ValidationError("Unknown platform \(raw)") }
+                return platform
+            }
+            if chosen.isEmpty, let implied = rules.impliedPlatforms(for: key) { chosen = implied }
+            let newKey = StringKey(key: key, description: description, tags: tags, platforms: chosen, isPlural: plural,
+                                   translations: [source: translation])
+            if let problem = rules.platformProblem(for: newKey) { throw ValidationError(problem) }
             let result = try await loaded.backend.push([.addKey(newKey)], basedOn: snapshot, context: loaded.context(note: "cli"))
             if let conflict = result.conflicts.first { throw ValidationError("Not added: \(conflict.kind == .duplicateKey ? "the key already exists" : "\(conflict.kind)")") }
             Swift.print("Added \(key).")

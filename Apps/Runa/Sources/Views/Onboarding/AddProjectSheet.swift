@@ -37,6 +37,7 @@ struct GoogleSheetSetup: View {
     @State private var link = ""
     @State private var accountEmail: String?
     @State private var importingKey = false
+    @State private var droppingKey = false
     @State private var checking = false
     @State private var inspection: GoogleSheetsBackend.Inspection?
     @State private var problem: String?
@@ -53,11 +54,7 @@ struct GoogleSheetSetup: View {
                 if accounts.isEmpty {
                     Text("Runa reads and writes the sheet as a Google service account you own. Create one in Google Cloud (enable the Google Sheets API, create a service account, add a JSON key), then add the key here. It is stored in your Keychain.")
                         .font(RunaFont.small).foregroundStyle(RunaColor.textTertiary).fixedSize(horizontal: false, vertical: true)
-                    HStack {
-                        Button("Add Key File…") { importingKey = true }.buttonStyle(.runaPrimary)
-                        Link("How to create one", destination: URL(string: "https://console.cloud.google.com/iam-admin/serviceaccounts")!)
-                            .font(RunaFont.small)
-                    }
+                    keyDropZone
                 } else {
                     HStack {
                         Picker("", selection: Binding(get: { accountEmail ?? accounts.first?.clientEmail }, set: { accountEmail = $0 })) {
@@ -66,6 +63,8 @@ struct GoogleSheetSetup: View {
                         .labelsHidden()
                         Button("Add Key…") { importingKey = true }.buttonStyle(.runa(.ghost, size: .small))
                     }
+                    Text(droppingKey ? "Drop to add the key" : "You can also drop another key file here.")
+                        .font(RunaFont.mini).foregroundStyle(droppingKey ? RunaColor.accent : RunaColor.textQuaternary)
                     if let email = accountEmail ?? accounts.first?.clientEmail {
                         HStack(spacing: 6) {
                             Text("Share your sheet with this address as an Editor:").font(RunaFont.small).foregroundStyle(RunaColor.textTertiary)
@@ -78,6 +77,11 @@ struct GoogleSheetSetup: View {
                     }
                 }
             }
+            .dropDestination(for: URL.self) { urls, _ in
+                guard let url = keyFile(among: urls) else { return false }
+                addKey(from: url)
+                return true
+            } isTargeted: { droppingKey = $0 }
             step(2, "Spreadsheet") {
                 TextField("Paste the sheet's link from the browser", text: $link).textFieldStyle(.runa)
                     .onChange(of: link) { _, _ in inspection = nil; problem = nil }
@@ -93,14 +97,45 @@ struct GoogleSheetSetup: View {
         }
         .fileImporter(isPresented: $importingKey, allowedContentTypes: [.json]) { result in
             guard case .success(let url) = result else { return }
-            let access = url.startAccessingSecurityScopedResource()
-            defer { if access { url.stopAccessingSecurityScopedResource() } }
-            do {
-                let credentials = try app.saveServiceAccount(json: Data(contentsOf: url))
-                accountEmail = credentials.clientEmail
-            } catch {
-                problem = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            addKey(from: url)
+        }
+    }
+
+    /// Dashed target shown until the first key is added: drop the JSON file, or pick it.
+    var keyDropZone: some View {
+        VStack(spacing: RunaSpacing.s) {
+            Image(systemName: "key").font(.system(size: 22, weight: .light))
+                .foregroundStyle(droppingKey ? RunaColor.accent : RunaColor.textTertiary)
+            Text(droppingKey ? "Drop to add the key" : "Drop the JSON key file here")
+                .font(RunaFont.bodyMedium).foregroundStyle(RunaColor.textPrimary)
+            HStack {
+                Button("Add Key File…") { importingKey = true }.buttonStyle(.runaPrimary)
+                Link("How to create one", destination: URL(string: "https://console.cloud.google.com/iam-admin/serviceaccounts")!)
+                    .font(RunaFont.small)
             }
+        }
+        .frame(maxWidth: .infinity)
+        .padding(RunaSpacing.l)
+        .background(RoundedRectangle(cornerRadius: RunaRadius.sheet)
+            .strokeBorder(droppingKey ? RunaColor.accent : RunaColor.borderStrong, style: StrokeStyle(lineWidth: 1.5, dash: [6])))
+        .background(RoundedRectangle(cornerRadius: RunaRadius.sheet).fill(droppingKey ? RunaColor.selected : .clear))
+    }
+
+    /// The dropped item that looks like a key: a `.json` file, or the only item if nothing is.
+    func keyFile(among urls: [URL]) -> URL? {
+        urls.first { $0.pathExtension.lowercased() == "json" } ?? (urls.count == 1 ? urls.first : nil)
+    }
+
+    /// Reads a key file from the picker or a drop, stores it in the Keychain and selects it.
+    func addKey(from url: URL) {
+        let access = url.startAccessingSecurityScopedResource()
+        defer { if access { url.stopAccessingSecurityScopedResource() } }
+        do {
+            let credentials = try app.saveServiceAccount(json: Data(contentsOf: url))
+            accountEmail = credentials.clientEmail
+            problem = nil
+        } catch {
+            problem = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
         }
     }
 

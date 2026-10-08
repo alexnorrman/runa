@@ -48,10 +48,12 @@ public enum SheetRequest: Hashable, Sendable {
         }
         switch self {
         case .addSheet(let sheetID, let title, let hidden, let rowCount, let columnCount):
+            // Google rejects a grid whose rows are all frozen, so a one-row tab gets no frozen header.
+            var grid: [(String, JSONValue)] = [("rowCount", .number(Double(rowCount))), ("columnCount", .number(Double(columnCount)))]
+            if rowCount > 1 { grid.append(("frozenRowCount", .number(1))) }
             return .object([("addSheet", .object([("properties", .object([
                 ("sheetId", .number(Double(sheetID))), ("title", .string(title)), ("hidden", .bool(hidden)),
-                ("gridProperties", .object([("rowCount", .number(Double(rowCount))), ("columnCount", .number(Double(columnCount))),
-                                            ("frozenRowCount", .number(1))])),
+                ("gridProperties", .object(grid)),
             ]))]))])
         case .renameSheet(let sheetID, let title):
             return .object([("updateSheetProperties", .object([

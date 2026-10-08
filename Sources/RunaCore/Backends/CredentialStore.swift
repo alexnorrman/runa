@@ -3,8 +3,8 @@ import Foundation
 /// Finds a Google service account key for the CLI and MCP server.
 ///
 /// Order: an explicit path, the config's `credentials`, `$RUNA_GOOGLE_CREDENTIALS` (a path or the
-/// JSON itself), then `~/.config/runa/google-service-account.json`, which the Mac app writes when
-/// you install the command line tool.
+/// JSON itself), then `~/.config/runa/google-service-account.json`, which the Mac app writes when you
+/// press Use for CLI in Settings → Command Line. Installing the command line tool does not write it.
 public enum CredentialStore {
     public static var defaultURL: URL {
         FileManager.default.homeDirectoryForCurrentUser
@@ -31,7 +31,8 @@ public enum CredentialStore {
         }
         if FileManager.default.fileExists(atPath: defaultURL.path) { return try read(defaultURL.path) }
         throw BackendError.authenticationFailed(
-            "No Google credentials. Set RUNA_GOOGLE_CREDENTIALS, add `credentials:` to runa.yml, or install the command line tool from the Runa app.")
+            "No Google credentials. In the Runa app, open Settings → Command Line and press Use for CLI next to the service account. "
+                + "Or set RUNA_GOOGLE_CREDENTIALS, or add `credentials:` to runa.yml.")
     }
 
     /// Saves a key where the CLI looks by default, readable only by the current user.

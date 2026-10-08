@@ -13,13 +13,18 @@ struct NewKeySheet: View {
     @State private var addAnother = false
     @FocusState private var focusName: Bool
 
+    var rules: KeyNamingRules { store.namingRules }
+
     var problem: String? {
         let trimmed = name.trimmingCharacters(in: .whitespaces)
         if trimmed.isEmpty { return nil }
-        if let problem = KeyNaming.problem(with: trimmed) { return problem }
+        if let problem = rules.problem(with: trimmed) { return problem }
         if store.snapshot?.key(named: trimmed) != nil { return "\(trimmed) already exists." }
         return nil
     }
+
+    /// Platforms the name implies, such as iOS only for `ios_…` in projects whose key format starts with a platform.
+    var impliedPlatforms: [Platform]? { rules.impliedPlatforms(for: name.trimmingCharacters(in: .whitespaces)) }
 
     var similar: [StringKey] {
         guard let snapshot = store.snapshot, text.count >= 3 else { return [] }
@@ -36,8 +41,15 @@ struct NewKeySheet: View {
         VStack(alignment: .leading, spacing: RunaSpacing.m) {
             Text("New key").runaTitle(RunaFont.title3)
             VStack(alignment: .leading, spacing: 4) {
-                TextField("screen.element.purpose", text: $name).textFieldStyle(.runaMono).focused($focusName)
-                if let problem { Text(problem).font(RunaFont.small).foregroundStyle(RunaColor.missing) }
+                TextField(rules.template?.source ?? "screen.element.purpose", text: $name).textFieldStyle(.runaMono).focused($focusName)
+                if let problem {
+                    Text(problem).font(RunaFont.small).foregroundStyle(RunaColor.missing).fixedSize(horizontal: false, vertical: true)
+                } else if let platforms = impliedPlatforms {
+                    Text("Ships to \(platforms.map(\.displayName).joined()) only, as its name says.")
+                        .font(RunaFont.small).foregroundStyle(RunaColor.textTertiary)
+                } else if let format = rules.formatDescription {
+                    Text("Format: \(format)").font(RunaFont.small).foregroundStyle(RunaColor.textTertiary).lineLimit(2)
+                }
             }
             if plural {
                 TextField("Singular, e.g. {count:int} item", text: $one).textFieldStyle(.runa)
@@ -74,7 +86,7 @@ struct NewKeySheet: View {
         .background(RunaColor.elevated)
         .onAppear {
             focusName = true
-            if !store.searchText.isEmpty, KeyNaming.problem(with: store.searchText) == nil { name = store.searchText }
+            if !store.searchText.isEmpty, rules.problem(with: store.searchText) == nil { name = store.searchText }
         }
     }
 
@@ -83,7 +95,7 @@ struct NewKeySheet: View {
         var forms: [PluralCategory: String] = [.other: text]
         if plural, !one.isEmpty { forms[.one] = one }
         let key = StringKey(key: name.trimmingCharacters(in: .whitespaces), description: description.trimmingCharacters(in: .whitespacesAndNewlines),
-                            isPlural: plural, translations: [source: Translation(forms: forms)])
+                            platforms: impliedPlatforms ?? [], isPlural: plural, translations: [source: Translation(forms: forms)])
         store.perform([.addKey(key)])
         store.selection = [key.id]
         if addAnother {

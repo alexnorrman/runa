@@ -125,7 +125,8 @@ public struct GoogleSheetsBackend: StringsBackend {
         for tab in SheetLayout.hiddenTabs where info.tab(tab) == nil {
             let header = SheetLayout.header(for: tab)
             let sheetID = newSheetID()
-            requests.append(.addSheet(sheetID: sheetID, title: tab, hidden: true, rowCount: 1, columnCount: header.count))
+            // Two rows, not one: the header row is frozen, and Google refuses to freeze every row of a grid.
+            requests.append(.addSheet(sheetID: sheetID, title: tab, hidden: true, rowCount: 2, columnCount: header.count))
             var rows = [header]
             if tab == SheetLayout.metaTab {
                 rows += [["schemaVersion", String(ProjectSettings.currentSchemaVersion)],
@@ -133,6 +134,16 @@ public struct GoogleSheetsBackend: StringsBackend {
                          ["sourceLocale", sourceLocale.rawValue]]
             }
             requests.append(.appendRows(sheetID: sheetID, rows: rows))
+        }
+
+        // Visible tabs for the naming guide and glossary, so people find where they go.
+        for tab in SheetLayout.guidelineTabs where info.tab(tab) == nil {
+            let rows = tab == SheetLayout.guidelinesTab
+                ? GuidelinesSheet.guidelinesGrid(ProjectGuidelines(), existing: [])
+                : [SheetLayout.glossaryHeader + allLocales.filter { $0 != sourceLocale }.map(\.rawValue)]
+            let sheetID = newSheetID()
+            requests.append(.addSheet(sheetID: sheetID, title: tab, hidden: false, rowCount: 20, columnCount: max(3, rows[0].count)))
+            requests.append(.updateCells(sheetID: sheetID, row: 0, column: 0, rows: rows))
         }
         try await api.batchUpdate(spreadsheetID, requests: requests)
         return try await pull()
@@ -142,7 +153,7 @@ public struct GoogleSheetsBackend: StringsBackend {
 
     func load() async throws -> DecodedSheet {
         let info = try await api.spreadsheet(spreadsheetID)
-        let wanted = [SheetLayout.stringsTab] + SheetLayout.hiddenTabs
+        let wanted = [SheetLayout.stringsTab] + SheetLayout.hiddenTabs + SheetLayout.guidelineTabs
         let present = wanted.filter { info.tab($0) != nil }
         let grids = try await api.values(spreadsheetID, tabs: present)
         return try SheetCodec.decode(info: info, grids: grids)
@@ -206,6 +217,35 @@ public struct GoogleSheetsBackend: StringsBackend {
         if let history = decoded.info.tab(SheetLayout.historyTab) {
             let entry = HistoryEntry(date: context.date, actor: context.actor, action: .removeLocale, locale: locale, note: context.note)
             requests.append(.appendRows(sheetID: history.sheetID, rows: [SheetWriter.historyRow(entry)]))
+        }
+        try await api.batchUpdate(spreadsheetID, requests: requests)
+        return try await pull()
+    }
+
+    public func setGuidelines(_ guidelines: ProjectGuidelines, basedOn base: ProjectGuidelines, context: PushContext) async throws -> Snapshot {
+        let decoded = try await loadForWriting(context: context)
+        let current = decoded.snapshot.guidelines
+        let merged = try ProjectGuidelines.merge(mine: guidelines.normalized, base: base.normalized, theirs: current)
+        let history = merged.historyEntries(from: current, context: context)
+        guard !history.isEmpty else { return decoded.snapshot }
+        try GuidelinesSheet.checkCellSizes(merged)
+
+        var nextID = (decoded.info.tabs.map(\.sheetID).max() ?? 0) + 1
+        func newSheetID() -> Int {
+            defer { nextID += 1 }
+            return nextID
+        }
+        var requests: [SheetRequest] = []
+        if history.contains(where: { $0.key != "glossary" }) {
+            let grid = GuidelinesSheet.guidelinesGrid(merged, existing: decoded.grids[SheetLayout.guidelinesTab] ?? [])
+            requests += GuidelinesSheet.requests(tab: SheetLayout.guidelinesTab, grid: grid, decoded: decoded, newSheetID: newSheetID)
+        }
+        if history.contains(where: { $0.key == "glossary" }) {
+            let grid = GuidelinesSheet.glossaryGrid(merged, settings: decoded.snapshot.settings)
+            requests += GuidelinesSheet.requests(tab: SheetLayout.glossaryTab, grid: grid, decoded: decoded, newSheetID: newSheetID)
+        }
+        if let tab = decoded.info.tab(SheetLayout.historyTab) {
+            requests.append(.appendRows(sheetID: tab.sheetID, rows: history.map(SheetWriter.historyRow)))
         }
         try await api.batchUpdate(spreadsheetID, requests: requests)
         return try await pull()

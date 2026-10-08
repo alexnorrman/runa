@@ -106,6 +106,9 @@ struct Check: AsyncParsableCommand {
     @Flag(help: "Also fail on machine drafts and translations that need review.")
     var approved = false
 
+    @Flag(help: "Also fail on key names that break the project's key format, or whose platform prefix disagrees with their platforms.")
+    var names = false
+
     @Flag(help: "Print JSON.")
     var json = false
 
@@ -122,12 +125,15 @@ struct Check: AsyncParsableCommand {
                 }
             }
         }
+        let naming = names ? AgentGuide.namingProblems(in: snapshot) : []
         if json {
             struct Report: Encodable {
                 var ok: Bool
                 var problems: [String: [String: String]]
+                var naming: [String: String]?
             }
-            print(try Output.json(Report(ok: problems.isEmpty, problems: problems)))
+            let namingReport = names ? Dictionary(naming.map { ($0.key, $0.problem) }, uniquingKeysWith: { first, _ in first }) : nil
+            print(try Output.json(Report(ok: problems.isEmpty && naming.isEmpty, problems: problems, naming: namingReport)))
         } else {
             print(Output.bold(snapshot.settings.name))
             for locale in locales {
@@ -140,8 +146,18 @@ struct Check: AsyncParsableCommand {
                     print("  \(key)  \(Output.dim(detail))")
                 }
             }
+            if names {
+                let format = snapshot.namingRules.formatDescription.map { " (\($0))" } ?? ""
+                print("")
+                if snapshot.keys.isEmpty {
+                    print("Key names: no keys yet\(format).")
+                } else {
+                    print(naming.isEmpty ? "Key names: all \(snapshot.keys.count) follow the project's format\(format)." : "Key names\(format):")
+                }
+                for item in naming { print("  \(item.key)  \(Output.dim(item.problem))") }
+            }
         }
-        if !problems.isEmpty { throw ExitCode(1) }
+        if !problems.isEmpty || !naming.isEmpty { throw ExitCode(1) }
     }
 }
 

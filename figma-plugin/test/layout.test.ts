@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { derivedId } from "../src/sheets/hash";
-import { parseSheet, sourceText } from "../src/sheets/layout";
+import { parseGuidelines, parseSheet, sourceText } from "../src/sheets/layout";
 import { SheetError } from "../src/sheets/types";
 import { CONTEXT_HEADER_V1, IDS, sampleInfo, sampleModel, TITLE_URL } from "./fixtures";
 
@@ -107,5 +107,32 @@ describe("parseSheet", () => {
     });
     expect(model.byName.get("checkout.title")!.id).toBe(IDS.title);
     expect(model.warnings.some((warning) => warning.includes("more than once"))).toBe(true);
+  });
+});
+
+describe("guidelines tab", () => {
+  it("reads the naming guide, key template and pattern", () => {
+    const model = sampleModel((grids) => {
+      grids.guidelines = [
+        ["Topic", "Language", "Value"],
+        ["naming", "", "## Keys\nfeature_description_type"],
+        ["keyTemplate", "", "  {feature}_{description}_{type:title|text|action} "],
+        ["keyPattern", "", ""],
+        ["style", "sv", "Informellt"],
+        ["owner", "", "Design"],
+      ];
+    });
+    expect(model.guidelines).toEqual({ naming: "## Keys\nfeature_description_type", keyTemplate: "{feature}_{description}_{type:title|text|action}", keyPattern: "" });
+    expect(model.rules.template?.source).toBe("{feature}_{description}_{type:title|text|action}");
+    expect(model.warnings).toEqual([]);
+  });
+
+  it("has no rules without the tab, and warns about a broken template", () => {
+    expect(sampleModel().rules.regex).toBeUndefined();
+    expect(parseGuidelines(undefined)).toEqual({ naming: "", keyTemplate: "", keyPattern: "" });
+    const broken = sampleModel((grids) => {
+      grids.guidelines = [["topic", "language", "value"], ["keyTemplate", "", "{feature"]];
+    });
+    expect(broken.warnings).toEqual(['The key template has a "{" without a matching "}". (guidelines tab)']);
   });
 });

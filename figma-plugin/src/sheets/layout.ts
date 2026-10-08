@@ -1,8 +1,9 @@
 import { derivedId, isPluralCategory, parseUuid, type Forms, type PluralCategory } from "./hash";
 import { localeFromHeader, normalizeLocale } from "./locale";
 import { parseFigmaUrl } from "../shared/figma-url";
+import { namingRules, type NamingRules } from "../core/keys";
 import {
-  CONTEXT_TAB, DESCRIPTION_ALIASES, HISTORY_TAB, HIDDEN_TABS, META_TAB, SheetError, STRINGS_TAB,
+  CONTEXT_TAB, DESCRIPTION_ALIASES, GUIDELINES_TAB, HISTORY_TAB, HIDDEN_TABS, META_TAB, SheetError, STRINGS_TAB,
   type Grid, type Grids, type SpreadsheetInfo,
 } from "./types";
 
@@ -75,6 +76,33 @@ export interface SheetModel {
   /** What the Runa Mac app must set up before the plugin may write. Empty when writing is safe. */
   setupIssues: string[];
   warnings: string[];
+  /** The project's naming guide and key format, from the guidelines tab. */
+  guidelines: { naming: string; keyTemplate: string; keyPattern: string };
+  rules: NamingRules;
+}
+
+/** Reads the `guidelines` tab: rows of topic, language, value. The first non-empty value of each topic counts. */
+export function parseGuidelines(grid: Grid | undefined): { naming: string; keyTemplate: string; keyPattern: string } {
+  const result = { naming: "", keyTemplate: "", keyPattern: "" };
+  const rows = grid ?? [];
+  const header = (rows[0] ?? []).map((name) => name.trim().toLowerCase());
+  const topic = header.indexOf("topic") >= 0 ? header.indexOf("topic") : 0;
+  const value = header.indexOf("value") >= 0 ? header.indexOf("value") : 2;
+  for (const row of rows.slice(1)) {
+    const text = cell(row, value).trim();
+    switch (cell(row, topic).trim().toLowerCase()) {
+      case "naming":
+        result.naming ||= text;
+        break;
+      case "keytemplate":
+        result.keyTemplate ||= text;
+        break;
+      case "keypattern":
+        result.keyPattern ||= text;
+        break;
+    }
+  }
+  return result;
 }
 
 export function cell(row: readonly string[] | undefined, index: number | undefined): string {
@@ -254,6 +282,9 @@ export function parseSheet(info: SpreadsheetInfo, grids: Grids): SheetModel {
   if (columns.figma === undefined) setupIssues.push("the figma column");
 
   const projectName = meta.get("projectName") || info.title;
+  const guidelines = parseGuidelines(grids[GUIDELINES_TAB]);
+  const rules = namingRules(guidelines);
+  for (const problem of rules.problems) warnings.push(`${problem} (guidelines tab)`);
   return {
     spreadsheetTitle: info.title,
     projectName,
@@ -269,6 +300,8 @@ export function parseSheet(info: SpreadsheetInfo, grids: Grids): SheetModel {
     missingTabs,
     setupIssues,
     warnings,
+    guidelines,
+    rules,
   };
 }
 

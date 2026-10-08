@@ -12,7 +12,7 @@ struct Runa: AsyncParsableCommand {
         you review and commit them as usual.
         """,
         version: RunaVersion.current,
-        subcommands: [Init.self, Setup.self, Pull.self, Check.self, Keys.self, Locales.self, Import.self, MCPCommand.self]
+        subcommands: [Init.self, Setup.self, Pull.self, Check.self, Keys.self, Locales.self, Guidelines.self, Import.self, MCPCommand.self]
     )
 }
 

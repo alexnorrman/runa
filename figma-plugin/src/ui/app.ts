@@ -4,7 +4,7 @@
  */
 import { linkState, type KeyLike, type LinkInfo, type LinkState } from "../core/drift";
 import { search, type SearchItem } from "../core/fuzzy";
-import { keyNameProblem, suggestKey } from "../core/keys";
+import { formatDescription, keyNameProblem, platformIn, suggestKey, type SuggestInput } from "../core/keys";
 import { spreadsheetIdFrom } from "../sheets/api";
 import { parseServiceAccount } from "../sheets/auth";
 import { randomUuid } from "../sheets/hash";
@@ -18,6 +18,8 @@ import { normalizeLineBreaks } from "../shared/text";
 import { Bridge } from "./bridge";
 import { h, icon, mark, replaceChildren } from "./dom";
 import { SheetSession } from "./session";
+
+const PLATFORM_NAMES: Record<string, string> = { ios: "iOS", android: "Android", web: "Web" };
 
 type BannerKind = "error" | "warning" | "info" | "success";
 
@@ -201,10 +203,11 @@ export class App {
   private draftFor(layer: TextLayer, taken: Set<string> = this.takenKeys()): Draft {
     let draft = this.drafts.get(layer.id);
     if (!draft) {
-      const input: { text: string; frame?: string; page?: string; layerName?: string } = { text: layer.characters, layerName: layer.name };
+      const input: SuggestInput = { text: layer.characters, layerName: layer.name, containers: layer.containers ?? [] };
       if (layer.frame) input.frame = layer.frame;
       if (layer.page) input.page = layer.page;
-      draft = { key: suggestKey(input, taken), edited: false, description: "" };
+      if (layer.fontSize !== undefined) input.fontSize = layer.fontSize;
+      draft = { key: suggestKey(input, taken, this.model?.rules), edited: false, description: "" };
       this.drafts.set(layer.id, draft);
     }
     return draft;
@@ -289,7 +292,7 @@ export class App {
       for (const layer of layers) {
         const draft = this.draftFor(layer, taken);
         const key = draft.key.trim();
-        const problem = keyNameProblem(key);
+        const problem = keyNameProblem(key, this.model?.rules);
         if (problem) throw new Error(layers.length > 1 ? `${key || "(empty)"}: ${problem}` : problem);
         if (names.has(key)) throw new Error(`Two layers would get the key "${key}". Give each a different name.`);
         if (!normalizeLineBreaks(layer.characters)) throw new Error(`The layer "${layer.name}" has no text.`);
@@ -730,7 +733,14 @@ export class App {
   private renderUnlinked(layer: TextLayer): HTMLElement[] {
     const draft = this.draftFor(layer);
     const blocker = this.writeBlocker();
-    const hint = h("div", { class: "hint" }, blocker ?? "Enter to create · Esc resets the suggestion");
+    const idleHint = () => {
+      if (blocker) return blocker;
+      const platform = platformIn(draft.key.trim(), this.model?.rules);
+      if (platform) return `${PLATFORM_NAMES[platform] ?? platform} only, as its name says · Enter to create`;
+      const format = this.model ? formatDescription(this.model.rules) : undefined;
+      return format ? `Format: ${format} · Enter to create` : "Enter to create · Esc resets the suggestion";
+    };
+    const hint = h("div", { class: "hint" }, idleHint());
     const createButton = h(
       "button",
       { class: "button primary", disabled: !!this.busy || !!blocker, onclick: () => void this.create([layer]) },
@@ -738,7 +748,7 @@ export class App {
       h("span", { class: "kbd" }, "↵"),
     );
     const validate = () => {
-      const problem = draft.key.trim() ? keyNameProblem(draft.key.trim()) : "Enter a key name.";
+      const problem = draft.key.trim() ? keyNameProblem(draft.key.trim(), this.model?.rules) : "Enter a key name.";
       const exists = this.model?.byName.has(draft.key.trim());
       keyInput.classList.toggle("invalid", !!problem || !!exists);
       if (problem || exists) {
@@ -746,7 +756,7 @@ export class App {
         hint.textContent = problem ?? "A key with this name exists. Link to it below, or pick another name.";
       } else {
         hint.className = "hint";
-        hint.textContent = blocker ?? "Enter to create · Esc resets the suggestion";
+        hint.textContent = idleHint();
       }
       createButton.toggleAttribute("disabled", !!this.busy || !!blocker || !!problem || !!exists);
     };
@@ -1004,7 +1014,7 @@ export class App {
       let message: string | null = null;
       layers.forEach((layer, index) => {
         const key = this.draftFor(layer).key.trim();
-        const problem = keyNameProblem(key) ?? (this.model?.byName.has(key) ? `"${key}" already exists.` : undefined) ?? (seen.has(key) ? `"${key}" is used twice.` : undefined);
+        const problem = keyNameProblem(key, this.model?.rules) ?? (this.model?.byName.has(key) ? `"${key}" already exists.` : undefined) ?? (seen.has(key) ? `"${key}" is used twice.` : undefined);
         seen.add(key);
         inputs[index]?.classList.toggle("invalid", !!problem);
         if (problem && !message) message = problem;

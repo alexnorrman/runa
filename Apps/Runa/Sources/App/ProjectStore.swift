@@ -103,6 +103,38 @@ final class ProjectStore {
     var settings: ProjectSettings? { snapshot?.settings }
     var displayName: String { app.settings.displayName }
 
+    /// Guidelines from the backend. Glossary and style guides this Mac kept before they moved into the backend
+    /// fill in until someone saves the project settings.
+    var guidelines: ProjectGuidelines {
+        var guidelines = snapshot?.guidelines ?? ProjectGuidelines()
+        if guidelines.glossary.isEmpty { guidelines.glossary = record.glossary }
+        for (locale, text) in record.styleGuides where guidelines.styleGuides[locale] == nil { guidelines.styleGuides[locale] = text }
+        return guidelines
+    }
+
+    var namingRules: KeyNamingRules { KeyNamingRules(snapshot?.guidelines ?? ProjectGuidelines()) }
+
+    /// True while a glossary or style guide exists only on this Mac.
+    var hasLocalOnlyGuidelines: Bool { !record.glossary.isEmpty || !record.styleGuides.isEmpty }
+
+    /// Saves guidelines edited on top of `original`, what the backend had when editing started.
+    /// Returns an error message, or nil once saved.
+    func saveGuidelines(_ edited: ProjectGuidelines, basedOn original: ProjectGuidelines) async -> String? {
+        do {
+            if !pending.isEmpty { await push() }
+            let backend = try app.backend(for: record)
+            let fresh = try await backend.setGuidelines(edited, basedOn: original, context: PushContext(actor: displayName))
+            base = fresh
+            snapshot = Self.applyLocally(pending, to: fresh, actor: displayName)
+            lastSynced = Date()
+            saveCache()
+            if hasLocalOnlyGuidelines { updateRecord { $0.glossary = []; $0.styleGuides = [:] } }
+            return nil
+        } catch {
+            return message(error)
+        }
+    }
+
     func updateRecord(_ change: (inout ProjectRecord) -> Void) {
         change(&record)
         app.update(record)

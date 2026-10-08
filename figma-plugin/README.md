@@ -19,9 +19,13 @@ The plugin reads and writes the sheet exactly as described in
   - grey: linked, but the sheet is not loaded yet
 
   Placeholders count as matching: a layer reading "3 items" matches `{count:int} items`.
-- **Suggests a key** from the top-level frame and the text, in dot notation with snake_case
-  segments: frame "Checkout — Summary" and text "Pay now" give `checkout_summary.pay_now`
-  (ASCII only, at most four words of the text, `_2`, `_3`… when the name is taken). You can edit it.
+- **Suggests a key** from the top-level frame and the text. When the project sets a key format in
+  the sheet's `guidelines` tab, the suggestion follows it: with
+  `{platform?}_{feature}_{description}_{type:title|text|action}`, frame "Home" and text "Welcome back"
+  give `home_welcomeBack_text`, and text on a button gets `action`. Without a format it is dot notation
+  with snake_case segments: frame "Checkout — Summary" and text "Pay now" give
+  `checkout_summary.pay_now` (ASCII only, at most four words of the text, `_2`, `_3`… when the name is
+  taken). You can edit it; names that break the project's format are refused.
 - **Searches existing keys** by name and source text (fuzzy, top 8; ↑/↓ to move, Enter to link,
   Esc to clear).
 - **Create** a key from a layer: a new random UUID, the layer's text as the source-language value,

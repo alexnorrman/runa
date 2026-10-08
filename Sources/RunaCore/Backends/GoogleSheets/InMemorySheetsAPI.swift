@@ -88,8 +88,13 @@ public actor InMemorySheetsAPI: SheetsAPI {
         }
         switch request {
         case .addSheet(let sheetID, let title, let hidden, let rowCount, let columnCount):
-            guard !spreadsheet.tabs.contains(where: { $0.info.title == title || $0.info.sheetID == sheetID }) else {
+            // Google compares tab titles case-insensitively.
+            guard !spreadsheet.tabs.contains(where: { $0.info.title.caseInsensitiveCompare(title) == .orderedSame || $0.info.sheetID == sheetID }) else {
                 throw BackendError.server(400, "A sheet with the name \"\(title)\" already exists")
+            }
+            // Google refuses to freeze every row of a grid. Check the request as it would be sent.
+            if case .number(let frozen)? = request.json["addSheet"]?["properties"]?["gridProperties"]?["frozenRowCount"], Int(frozen) >= rowCount {
+                throw BackendError.server(400, "Invalid addSheet: frozenRowCount (\(Int(frozen))) must be less than rowCount (\(rowCount))")
             }
             spreadsheet.tabs.append(Tab(info: TabInfo(sheetID: sheetID, title: title, hidden: hidden, rowCount: rowCount,
                                                       columnCount: columnCount), grid: []))

@@ -148,6 +148,7 @@ struct AISettings: View {
 struct GoogleSettings: View {
     @Environment(AppModel.self) private var app
     @State private var importing = false
+    @State private var dropping = false
     @State private var problem: String?
     @State private var refresh = 0
 
@@ -167,7 +168,11 @@ struct GoogleSettings: View {
                         }
                     }
                 }
-                Button("Add Service Account Key…") { importing = true }
+                HStack {
+                    Button("Add Service Account Key…") { importing = true }
+                    Text(dropping ? "Drop to add the key" : "or drop a JSON key file anywhere here")
+                        .font(RunaFont.small).foregroundStyle(dropping ? RunaColor.accent : .secondary)
+                }
             } header: {
                 Text("Service accounts")
             } footer: {
@@ -179,15 +184,34 @@ struct GoogleSettings: View {
         .formStyle(.grouped)
         .frame(height: 300)
         .id(refresh)
+        .overlay {
+            RoundedRectangle(cornerRadius: RunaRadius.sheet)
+                .strokeBorder(RunaColor.accent, lineWidth: 1.5)
+                .padding(RunaSpacing.s)
+                .opacity(dropping ? 1 : 0)
+                .allowsHitTesting(false)
+        }
+        .dropDestination(for: URL.self) { urls, _ in
+            guard let url = urls.first(where: { $0.pathExtension.lowercased() == "json" }) ?? (urls.count == 1 ? urls.first : nil) else { return false }
+            addKey(from: url)
+            return true
+        } isTargeted: { dropping = $0 }
         .fileImporter(isPresented: $importing, allowedContentTypes: [.json]) { result in
             guard case .success(let url) = result else { return }
-            do {
-                try app.saveServiceAccount(json: Data(contentsOf: url))
-                refresh += 1
-                problem = nil
-            } catch {
-                problem = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
-            }
+            addKey(from: url)
+        }
+    }
+
+    /// Reads a key file from the picker or a drop and stores it in the Keychain.
+    func addKey(from url: URL) {
+        let access = url.startAccessingSecurityScopedResource()
+        defer { if access { url.stopAccessingSecurityScopedResource() } }
+        do {
+            try app.saveServiceAccount(json: Data(contentsOf: url))
+            refresh += 1
+            problem = nil
+        } catch {
+            problem = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
         }
     }
 }

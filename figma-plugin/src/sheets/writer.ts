@@ -5,7 +5,7 @@
  * resolved from it, only rows of the touched key change, and every change gets a `_history` row.
  * Values are written with `stringValue`, so text starting with `=` stays text.
  */
-import { keyNameProblem } from "../core/keys";
+import { keyNameProblem, platformIn } from "../core/keys";
 import { textHash, type Forms, type PluralCategory } from "./hash";
 import { cell, headerIndexes, splitList, type KeyEntry, type SheetModel, type StringsRow } from "./layout";
 import { normalizeLocale } from "./locale";
@@ -282,7 +282,7 @@ export function buildCreate(model: SheetModel, items: readonly CreateItem[], wri
 
   const names = new Set<string>();
   for (const item of items) {
-    const problem = keyNameProblem(item.key);
+    const problem = keyNameProblem(item.key, model.rules);
     if (problem) throw new SheetError(`"${item.key}": ${problem}`, "invalid-key");
     if (model.byName.has(item.key) || names.has(item.key)) {
       throw new SheetError(`A key named "${item.key}" already exists. Pick another name or link to it.`, "key-exists");
@@ -303,6 +303,7 @@ export function buildCreate(model: SheetModel, items: readonly CreateItem[], wri
     set(columns.key, item.key);
     set(columns.description, item.description?.trim() ?? "");
     set(columns.plural, "");
+    set(columns.platforms, platformIn(item.key, model.rules) ?? "");
     cells[source] = item.text;
     set(columns.figma, item.context.url);
     stringRows.push(cells);

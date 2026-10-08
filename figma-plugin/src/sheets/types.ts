@@ -6,6 +6,8 @@ export const STATUS_TAB = "_status";
 export const CONTEXT_TAB = "_context";
 export const HISTORY_TAB = "_history";
 export const HIDDEN_TABS = [META_TAB, STATUS_TAB, CONTEXT_TAB, HISTORY_TAB] as const;
+/** Visible tab with the naming guide, key template and pattern (docs/SHEET_FORMAT.md). */
+export const GUIDELINES_TAB = "guidelines";
 
 export const STATUS_HEADER = ["id", "locale", "status", "hash", "sourceHash", "updatedAt", "updatedBy"] as const;
 export const CONTEXT_HEADER = [

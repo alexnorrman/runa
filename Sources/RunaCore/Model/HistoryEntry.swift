@@ -9,6 +9,8 @@ public enum HistoryAction: String, Codable, Sendable, Hashable, CaseIterable {
     case linkFigma = "link-figma"
     case addLocale = "add-locale"
     case removeLocale = "remove-locale"
+    /// The naming guide, key template or pattern, a style guide or the glossary changed. `key` names the topic.
+    case updateGuidelines = "update-guidelines"
 }
 
 /// One row of history. Values are stored as text so every backend can keep them the same way.

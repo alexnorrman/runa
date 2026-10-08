@@ -41,15 +41,33 @@ public struct SnapshotWarning: Hashable, Codable, Sendable, CustomStringConverti
 public struct Snapshot: Hashable, Codable, Sendable {
     public var settings: ProjectSettings
     public var keys: [StringKey]
+    /// Naming convention, glossary and style guides, shared by every client of the project.
+    public var guidelines: ProjectGuidelines
     public var fetchedAt: Date
     public var warnings: [SnapshotWarning]
 
-    public init(settings: ProjectSettings, keys: [StringKey] = [], fetchedAt: Date = Date(), warnings: [SnapshotWarning] = []) {
+    public init(settings: ProjectSettings, keys: [StringKey] = [], guidelines: ProjectGuidelines = ProjectGuidelines(), fetchedAt: Date = Date(),
+                warnings: [SnapshotWarning] = [])
+    {
         self.settings = settings
         self.keys = keys
+        self.guidelines = guidelines
         self.fetchedAt = fetchedAt
         self.warnings = warnings
     }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        settings = try container.decode(ProjectSettings.self, forKey: .settings)
+        keys = try container.decode([StringKey].self, forKey: .keys)
+        // Snapshots cached before guidelines existed have none.
+        guidelines = try container.decodeIfPresent(ProjectGuidelines.self, forKey: .guidelines) ?? ProjectGuidelines()
+        fetchedAt = try container.decode(Date.self, forKey: .fetchedAt)
+        warnings = try container.decodeIfPresent([SnapshotWarning].self, forKey: .warnings) ?? []
+    }
+
+    /// Naming rules from the guidelines.
+    public var namingRules: KeyNamingRules { KeyNamingRules(guidelines) }
 
     public subscript(id id: UUID) -> StringKey? {
         keys.first { $0.id == id }

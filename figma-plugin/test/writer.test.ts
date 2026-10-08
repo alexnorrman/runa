@@ -271,3 +271,20 @@ describe("fresh reads", () => {
     expect(() => buildPush(model, { keyId: IDS.title, baseText: "Checkout", newText: "Check out" }, write)).toThrow(/_status/);
   });
 });
+
+describe("buildCreate with a key format", () => {
+  const withFormat = () =>
+    sampleModel((grids) => {
+      grids.guidelines = [["topic", "language", "value"], ["keyTemplate", "", "{platform?}_{feature}_{description}_{type:title|text|action}"]];
+    });
+
+  it("rejects names that break the project's format", () => {
+    expect(() => buildCreate(withFormat(), [{ id: NEW_ID, key: "checkout.pay", text: "Pay", context: context() }], write)).toThrow(/key format/);
+  });
+
+  it("limits a key with a platform prefix to that platform", () => {
+    const [strings] = buildCreate(withFormat(), [{ id: NEW_ID, key: "ios_checkout_applePay_action", text: "Pay", context: context() }], write);
+    const values = (strings as { appendCells: { rows: { values: unknown[] }[] } }).appendCells.rows[0]!.values;
+    expect(values[8]).toEqual({ userEnteredValue: { stringValue: "ios" } });
+  });
+});

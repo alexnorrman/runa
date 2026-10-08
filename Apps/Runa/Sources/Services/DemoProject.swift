@@ -43,7 +43,24 @@ enum DemoProject {
                 snapshot.keys[index].translations[locale]?.sourceHash = hash
             }
         }
-        _ = try LocalJSONBackend.create(at: url, settings: settings, keys: snapshot.keys)
+        _ = try LocalJSONBackend.create(at: url, settings: settings, keys: snapshot.keys, guidelines: guidelines)
         return ProjectRecord(name: settings.name, location: .localJSON(path: url.path))
     }
+
+    /// Sample guidelines that the demo's keys follow.
+    static let guidelines = ProjectGuidelines(
+        naming: """
+        ## Key names
+
+        `screen.element` or `screen.part.element`, lowercase, with `_` between words: `checkout.pay_button`,
+        `checkout.summary.total`. Use `common` as the screen for text shared by several screens.
+
+        ## Text
+
+        Describe where the text sits in the description, so translators and AI know how much room there is.
+        """,
+        keyPattern: #"^[a-z]+(\.[a-z_]+){1,2}$"#,
+        glossary: [GlossaryTerm(term: "Runa", note: "Product name"),
+                   GlossaryTerm(term: "cart", translations: ["sv": "varukorg", "de": "Warenkorb", "pl": "koszyk"])],
+        styleGuides: ["sv": "Informal \"du\", short sentences.", "de": "Formal \"Sie\"."])
 }

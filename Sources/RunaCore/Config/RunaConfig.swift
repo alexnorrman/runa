@@ -57,6 +57,15 @@ public struct RunaConfig: Codable, Sendable, Hashable {
         self.actor = actor
     }
 
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        backend = try container.decode(Backend.self, forKey: .backend)
+        // `targets:` with every entry commented out, as `runa init` writes it, reads as null: no targets yet.
+        targets = try container.decodeIfPresent([Target].self, forKey: .targets) ?? []
+        approvedOnly = try container.decodeIfPresent(Bool.self, forKey: .approvedOnly)
+        actor = try container.decodeIfPresent(String.self, forKey: .actor)
+    }
+
     public static let fileName = "runa.yml"
 
     /// Finds `runa.yml` in `directory` or the nearest parent, like git finds `.git`.

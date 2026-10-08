@@ -13,9 +13,13 @@ and CLI (Swift, `Sources/RunaCore/Backends/GoogleSheets`) and the Figma plugin (
 | `_status` | hidden | Review status per key and locale. |
 | `_context` | hidden | Figma links with design context. |
 | `_history` | hidden | Append-only change log. |
+| `guidelines` | yes | Naming guide, key format and style guides, for people and agents. Optional. |
+| `glossary` | yes | Terms AI must translate a fixed way. Optional. |
 
 Tab names are exact and case-sensitive. A spreadsheet without `_meta`/`_status`/`_context`/`_history`
-still reads; clients create the missing tabs on setup.
+still reads; clients create the missing tabs on setup. `guidelines` and `glossary` are optional: new
+sheets get them on setup, older ones when guidelines are first saved. Adding them did not change the
+schema version, since clients that do not know them ignore them.
 
 ## `strings`
 
@@ -25,7 +29,7 @@ position, so people can reorder or add their own columns. Unknown columns are pr
 | Header | Meaning |
 |---|---|
 | `_id` | Stable key id, lowercase UUID. Hidden. Blank means "derive" (below). |
-| `key` | Key name, dot notation: `checkout.summary.title`. Required. |
+| `key` | Key name, for example `checkout.summary.title`. Required. Projects can set a format in `guidelines`. |
 | `description` | Context for translators. Aliases: `comment`, `context`. |
 | `plural` | Blank for plain keys. For plural keys one row per form: `zero` `one` `two` `few` `many` `other`. |
 | *locale* | Any header that is a valid language tag with a real ISO 639 language (`en`, `sv`, `pt-BR`, `zh-Hans`) is a locale column. The cell is that locale's text. Empty cell = missing. |
@@ -92,8 +96,47 @@ only there is read as a context with just `url`, `fileKey` and `nodeId`.
 Header: `ts | actor | action | id | key | locale | plural | before | after | note`
 
 Append-only. `action` is one of `add-key`, `update-key`, `delete-key`, `set-value`, `set-status`,
-`link-figma`, `add-locale`, `remove-locale`. `note` says where a change came from:
+`link-figma`, `add-locale`, `remove-locale`, `update-guidelines`. For `update-guidelines`, `key` holds
+the topic (`naming`, `keyTemplate`, `keyPattern`, `style` with `locale`, or `glossary`, whose
+`before` and `after` are term counts such as `12 terms`). `note` says where a change came from:
 `figma`, `import values-sv/strings.xml`, `ai claude-opus-5-5`, …
+
+## `guidelines`
+
+Header `topic | language | value`, then one row per topic. The first non-empty value of a topic counts.
+
+| topic | language | value |
+|---|---|---|
+| `naming` | | Markdown for people and agents: how to name keys and write text. The MCP server sends it to agents. |
+| `keyTemplate` | | The key format, below. Empty: no rule. |
+| `keyPattern` | | A regular expression every key name must match in full. Checked instead of the template when set. |
+| `style` | a language code | The style guide for that language, used by AI translation. |
+
+Rows with other topics are notes for people. Clients that save guidelines rewrite the known topics
+and keep the other rows below them. A cell holds at most 50,000 characters.
+
+### Key template
+
+```
+{platform?}_{feature}_{description}_{type:title|text|action}
+```
+
+- `{name}` is one lowerCamelCase word: a letter, then letters and digits (`home`, `welcomeCard`).
+- `{name:a|b|c}` is one of the listed values.
+- `{platform}` is `ios`, `android` or `web`, unless values are listed. A key whose name starts with a
+  platform ships to that platform only; clients set `platforms` when they create it, and
+  `runa check --names` reports keys where the two disagree.
+- `?` makes a part optional together with the literal text right after it (`{platform?}_`), or the
+  literal right before it when the part comes last.
+- Everything outside braces is literal.
+
+Plural forms are never part of a key name: a plural key has one name and its forms live in the
+`plural` column.
+
+## `glossary`
+
+Header `term | note`, then one column per language code. One row per term. An empty translation means
+the term stays as it is in that language. Clients that save the glossary rewrite the whole tab.
 
 ## Writing rules
 
@@ -118,3 +161,27 @@ Every implementation must reproduce these (Swift: `TextTests.crossLanguageVector
 | hash of `{other: "Hej då 👋"}` | `48a4dc59c479` |
 | derived id of `checkout.title` | `d286c840-69d2-5786-b77b-30b06363380d` |
 | derived id of `cart.items` | `31962844-99e1-5361-85d8-42d00b9b2191` |
+
+Key templates (Swift: `KeyTemplateTests.templateVectors`; TypeScript: `test/keys.test.ts`). With the
+template `{platform?}_{feature}_{description}_{type:title|text|action}`:
+
+| Name | Valid | Platform |
+|---|---|---|
+| `home_welcomeCard_title` | yes | |
+| `common_ok_action` | yes | |
+| `ios_checkout_continueWithApplePay_action` | yes | `ios` |
+| `android_settings_openGooglePlay_action` | yes | `android` |
+| `web_footer_terms_text` | yes | `web` |
+| `home_welcomeCard_heading` | no | |
+| `Home_welcomeCard_title` | no | |
+| `home_welcome_card_title` | no | |
+| `ios_title` | no | |
+| `profile_friendsCount_text.one` | no, plural form in the name | |
+
+| Template | Name | Valid |
+|---|---|---|
+| `{platform?:ios\|android}_{feature}_{description}` | `web_footer_terms` | no |
+| `{feature}.{description}` | `checkout.summaryTitle` | yes |
+| `{feature}.{description}` | `checkout.summary.title` | no |
+| `{feature}_{description}_{variant?}` | `home_title` | yes |
+| `{feature}_{description}_{variant?}` | `home_title_short` | yes |

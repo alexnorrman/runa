@@ -11,7 +11,13 @@ public actor LocalJSONBackend: StringsBackend {
         var schemaVersion = ProjectSettings.currentSchemaVersion
         var settings: ProjectSettings
         var keys: [StringKey]
+        /// Absent in files written before guidelines existed.
+        var guidelines: ProjectGuidelines?
         var history: [HistoryEntry]
+
+        var snapshot: Snapshot {
+            Snapshot(settings: settings, keys: keys, guidelines: guidelines ?? ProjectGuidelines(), fetchedAt: Date())
+        }
     }
 
     public init(url: URL) {
@@ -19,23 +25,25 @@ public actor LocalJSONBackend: StringsBackend {
     }
 
     /// Creates a new project file. Fails if the file exists.
-    public static func create(at url: URL, settings: ProjectSettings, keys: [StringKey] = []) throws -> LocalJSONBackend {
+    public static func create(at url: URL, settings: ProjectSettings, keys: [StringKey] = [],
+                              guidelines: ProjectGuidelines = ProjectGuidelines()) throws -> LocalJSONBackend
+    {
         guard !FileManager.default.fileExists(atPath: url.path) else {
             throw BackendError.invalidData("\(url.lastPathComponent) already exists")
         }
         let backend = LocalJSONBackend(url: url)
-        try write(FileContents(settings: settings, keys: keys, history: []), to: url)
+        let stored = guidelines.normalized
+        try write(FileContents(settings: settings, keys: keys, guidelines: stored.isEmpty ? nil : stored, history: []), to: url)
         return backend
     }
 
     public func pull() async throws -> Snapshot {
-        let contents = try read()
-        return Snapshot(settings: contents.settings, keys: contents.keys, fetchedAt: Date())
+        try read().snapshot
     }
 
     public func push(_ changes: [Change], basedOn base: Snapshot, context: PushContext) async throws -> PushResult {
         var contents = try read()
-        let current = Snapshot(settings: contents.settings, keys: contents.keys, fetchedAt: Date())
+        let current = contents.snapshot
         let outcome = ChangeApplier.apply(changes, to: current, base: base, context: context)
         if !outcome.history.isEmpty {
             contents.keys = outcome.snapshot.keys
@@ -51,7 +59,7 @@ public actor LocalJSONBackend: StringsBackend {
         contents.settings.locales.append(locale)
         contents.history.append(HistoryEntry(date: context.date, actor: context.actor, action: .addLocale, locale: locale, note: context.note))
         try Self.write(contents, to: url)
-        return Snapshot(settings: contents.settings, keys: contents.keys)
+        return contents.snapshot
     }
 
     public func removeLocale(_ locale: LocaleCode, context: PushContext) async throws -> Snapshot {
@@ -62,7 +70,19 @@ public actor LocalJSONBackend: StringsBackend {
         for index in contents.keys.indices { contents.keys[index].translations[locale] = nil }
         contents.history.append(HistoryEntry(date: context.date, actor: context.actor, action: .removeLocale, locale: locale, note: context.note))
         try Self.write(contents, to: url)
-        return Snapshot(settings: contents.settings, keys: contents.keys)
+        return contents.snapshot
+    }
+
+    public func setGuidelines(_ guidelines: ProjectGuidelines, basedOn base: ProjectGuidelines, context: PushContext) async throws -> Snapshot {
+        var contents = try read()
+        let current = (contents.guidelines ?? ProjectGuidelines()).normalized
+        let merged = try ProjectGuidelines.merge(mine: guidelines.normalized, base: base.normalized, theirs: current)
+        let history = merged.historyEntries(from: current, context: context)
+        guard !history.isEmpty else { return contents.snapshot }
+        contents.guidelines = merged.isEmpty ? nil : merged
+        contents.history.append(contentsOf: history)
+        try Self.write(contents, to: url)
+        return contents.snapshot
     }
 
     public func history(keyID: UUID?, limit: Int) async throws -> [HistoryEntry] {

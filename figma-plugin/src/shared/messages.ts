@@ -26,6 +26,10 @@ export interface TextLayer {
   frame: string;
   page: string;
   hasMissingFont: boolean;
+  /** Font size of the first character; large text suggests a title. */
+  fontSize?: number;
+  /** Names of the layers around the text, nearest first (at most three); a button around it suggests an action. */
+  containers: string[];
 }
 
 /** Design context of a layer, captured right before a link is written. */

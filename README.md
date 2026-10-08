@@ -28,6 +28,7 @@ your Figma designs, and drafts translations with the AI provider you already use
 
 - [Install](#install)
 - [Connect a Google Sheet](#connect-a-google-sheet)
+- [Naming guide, glossary and style guides](#naming-guide-glossary-and-style-guides)
 - [Translate with AI](#translate-with-ai)
 - [Get strings into your apps](#get-strings-into-your-apps)
 - [Figma plugin](#figma-plugin)
@@ -74,6 +75,24 @@ Import [templates/runa-sheet-template.csv](templates/runa-sheet-template.csv) in
 Removing the service account from the sheet's sharing settings cuts off every Runa client at once.
 Never commit the key file.
 
+## Naming guide, glossary and style guides
+
+Each project keeps its own guidelines in the sheet's visible `guidelines` and `glossary` tabs, so
+people, the Mac app, the Figma plugin and AI agents all follow the same ones. Edit them in Project
+Settings, straight in the sheet, or with `runa guidelines set`.
+
+- **Key format.** A template such as `{platform?}_{feature}_{description}_{type:title|text|action}`.
+  Runa checks new key names against it in the app, the CLI, the MCP server and the Figma plugin, and
+  the plugin suggests names in that format. A key that starts with `ios_` or `android_` ships to that
+  platform only. `runa check --names` lists existing keys that break the format. The syntax is in
+  [docs/SHEET_FORMAT.md](docs/SHEET_FORMAT.md#key-template).
+- **Naming guide.** Markdown for people and agents. `runa mcp` sends it to agents when they connect.
+- **Glossary and style guides.** Steer AI translation, from the app or from an agent.
+
+Plural forms are not part of a key name: a plural is one key with `one`, `other` and the forms each
+language needs. Placeholders are written as `{name}` or `{count:int}`; Runa converts them for each
+platform.
+
 ## Translate with AI
 
 Settings → AI: pick a provider, paste an API key, press **Load Models**, then **Save**.
@@ -91,8 +110,8 @@ an estimate of tokens and, for Claude, the cost before anything is sent.
 
 Each string goes out with its description, plural forms the language needs, placeholders,
 translations that already exist in other languages, where it sits in Figma, nearby texts on the
-same screen, and the screen's width. Add a glossary and per-language style guides (formal or
-informal, tone) in Project Settings. Results are validated: missing or invented placeholders and
+same screen, and the screen's width. The project's glossary and per-language style guides (formal or
+informal, tone) go along too. Results are validated: missing or invented placeholders and
 missing plural forms are sent back to the model once, then reported if still wrong. Drafts land as
 **machine drafts**; open **Review** (⇧⌘R) to approve them with ⌘↩.
 
@@ -123,6 +142,8 @@ approvedOnly: false
 runa pull             # write every target; review the diff and commit
 runa check            # exit 1 when a key is missing in any language
 runa check --approved # also fail on drafts and translations that need review
+runa check --names    # also fail on key names that break the project's key format
+runa guidelines       # print the naming guide, key format, glossary and style guides
 runa keys search pay  # fuzzy search over keys and text
 runa keys add settings.title --text "Settings" --description "Title of the settings screen"
 runa import app/src/main/res --dry-run   # bring existing strings files in, with a conflict report
@@ -136,7 +157,8 @@ MessageFormat JSON. Placeholders are written once as `{name}`, `{count:int}` or
 
 **Credentials for the CLI.** `RUNA_GOOGLE_CREDENTIALS` (a path or the JSON itself), or
 `credentials:` in `runa.yml`, or `~/.config/runa/google-service-account.json`, which the Mac app
-writes from Settings → Command Line.
+writes when you press **Use for CLI** next to a service account in Settings → Command Line.
+Installing the command line tool does not copy the key; that is a separate step.
 
 **CI.** Use the action in this repository:
 
@@ -149,8 +171,9 @@ writes from Settings → Command Line.
 ```
 
 **MCP.** `claude mcp add runa -- runa mcp`. Tools: search, get, add, update source text, propose
-a translation (saved as a draft), delete, list languages, check and pull. The server tells the
-agent to reuse existing keys before adding new ones.
+a translation (saved as a draft), delete, list languages, check, pull, and the project's guidelines.
+The server tells the agent to reuse existing keys before adding new ones, sends it the project's
+naming guide and key format, and rejects names that break the format.
 
 ## Figma plugin
 

@@ -204,7 +204,7 @@ struct KeyDetailView: View {
     func commitName() {
         let trimmed = name.trimmingCharacters(in: .whitespaces)
         guard trimmed != key.key else { nameProblem = nil; return }
-        if let problem = KeyNaming.problem(with: trimmed) {
+        if let problem = store.namingRules.problem(with: trimmed) {
             nameProblem = problem
             return
         }
@@ -393,19 +393,26 @@ struct HistoryRow: View {
                 HStack(spacing: 4) {
                     Text(entry.actor).font(RunaFont.smallMedium).foregroundStyle(RunaColor.textSecondary)
                     Text(summary).font(RunaFont.small).foregroundStyle(RunaColor.textTertiary)
-                    if showKey, let key = entry.key { Text(key).font(RunaFont.mono(size: 11.5)).foregroundStyle(RunaColor.textSecondary) }
+                    if showKey, entry.action != .updateGuidelines, let key = entry.key {
+                        Text(key).font(RunaFont.mono(size: 11.5)).foregroundStyle(RunaColor.textSecondary)
+                    }
                     Spacer(minLength: 4)
                     Text(entry.date.formatted(.relative(presentation: .named))).font(RunaFont.small).foregroundStyle(RunaColor.textQuaternary)
                 }
-                if let before = entry.before, entry.action == .setValue || entry.action == .updateKey {
+                if let before = entry.before, entry.action == .setValue || entry.action == .updateKey || isShortGuideline {
                     Text(before).font(RunaFont.small).strikethrough().foregroundStyle(RunaColor.textQuaternary).lineLimit(2)
                 }
-                if let after = entry.after, entry.action != .setStatus {
+                if let after = entry.after, entry.action != .setStatus, entry.action != .updateGuidelines || isShortGuideline {
                     Text(after).font(RunaFont.small).foregroundStyle(RunaColor.textSecondary).lineLimit(3)
                 }
                 if let note = entry.note { Text(note).font(RunaFont.font(size: 11)).foregroundStyle(RunaColor.textQuaternary) }
             }
         }
+    }
+
+    /// Key formats and patterns are one line, worth showing; naming guides are long markdown, so the row only says it changed.
+    var isShortGuideline: Bool {
+        entry.action == .updateGuidelines && ["keyTemplate", "keyPattern", "glossary"].contains(entry.key ?? "")
     }
 
     var summary: String {
@@ -419,6 +426,15 @@ struct HistoryRow: View {
         case .linkFigma: return "linked Figma to"
         case .addLocale: return "added\(locale)"
         case .removeLocale: return "removed\(locale)"
+        case .updateGuidelines:
+            switch entry.key {
+            case "naming": return "changed the naming guide"
+            case "keyTemplate": return "changed the key format"
+            case "keyPattern": return "changed the key pattern"
+            case "glossary": return "changed the glossary"
+            case "style": return "changed the\(locale) style guide"
+            default: return "changed the guidelines"
+            }
         }
     }
 }

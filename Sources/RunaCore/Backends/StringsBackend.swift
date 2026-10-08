@@ -29,6 +29,10 @@ public protocol StringsBackend: Sendable {
 
     /// History, newest first. `keyID` narrows it to one key.
     func history(keyID: UUID?, limit: Int) async throws -> [HistoryEntry]
+
+    /// Saves the guidelines you edited on top of `base`. Fields someone else changed meanwhile are kept;
+    /// a field you both changed throws `BackendError.conflict`.
+    func setGuidelines(_ guidelines: ProjectGuidelines, basedOn base: ProjectGuidelines, context: PushContext) async throws -> Snapshot
 }
 
 public enum BackendError: Error, LocalizedError, Sendable, Equatable {
@@ -42,6 +46,7 @@ public enum BackendError: Error, LocalizedError, Sendable, Equatable {
     case rateLimited
     case server(Int, String)
     case network(String)
+    case conflict(String)
 
     public var errorDescription: String? {
         switch self {
@@ -55,6 +60,7 @@ public enum BackendError: Error, LocalizedError, Sendable, Equatable {
         case .rateLimited: "Google is rate limiting requests. Wait a minute and try again."
         case .server(let status, let message): "The server returned \(status): \(message)"
         case .network(let message): "Network error: \(message)"
+        case .conflict(let message): message
         }
     }
 }

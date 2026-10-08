@@ -236,6 +236,55 @@ let bob = PushContext(actor: "Bob", date: Date(timeIntervalSince1970: 1_790_000_
         #expect(try await backend.history(keyID: key.id, limit: 10).count == 1)
     }
 
+    @Test(arguments: fixtures.map(\.name)) func storesGuidelines(_ name: String) async throws {
+        let backend = try await fixture(name).make()
+        let empty = try await backend.pull().guidelines
+        #expect(empty.isEmpty)
+        var mine = empty
+        mine.naming = "## Keys\nUse `feature_description_type`.\n"
+        mine.keyTemplate = "{platform?}_{feature}_{description}_{type:title|text|action}"
+        mine.styleGuides = ["sv": "Informal \"du\"."]
+        mine.glossary = [GlossaryTerm(term: "Chip N' Run", note: "Brand"), GlossaryTerm(term: "League", translations: ["sv": "Liga"])]
+        let saved = try await backend.setGuidelines(mine, basedOn: empty, context: alice)
+        let read = try await backend.pull().guidelines
+        #expect(read == saved.guidelines)
+        #expect(read.naming == "## Keys\nUse `feature_description_type`.")
+        #expect(read.keyTemplate == mine.keyTemplate)
+        #expect(read.styleGuides == ["sv": "Informal \"du\"."])
+        #expect(read.glossary.map(\.term) == ["Chip N' Run", "League"])
+        #expect(read.glossary[0].translations.isEmpty)
+        #expect(read.glossary[0].note == "Brand")
+        #expect(read.glossary[1].translations == ["sv": "Liga"])
+        let history = try await backend.history(keyID: nil, limit: 10).filter { $0.action == .updateGuidelines }
+        #expect(Set(history.compactMap(\.key)) == ["naming", "keyTemplate", "style", "glossary"])
+        #expect(history.allSatisfy { $0.actor == "Alice" })
+    }
+
+    @Test(arguments: fixtures.map(\.name)) func mergesGuidelineEditsAndReportsConflicts(_ name: String) async throws {
+        let backend = try await fixture(name).make()
+        let base = try await backend.pull().guidelines
+        var aliceEdit = base
+        aliceEdit.naming = "Alice's guide"
+        _ = try await backend.setGuidelines(aliceEdit, basedOn: base, context: alice)
+
+        // Bob opened the settings before Alice saved and only changed the template: both edits survive.
+        var bobEdit = base
+        bobEdit.keyTemplate = "{feature}.{description}"
+        let merged = try await backend.setGuidelines(bobEdit, basedOn: base, context: bob).guidelines
+        #expect(merged.naming == "Alice's guide")
+        #expect(merged.keyTemplate == "{feature}.{description}")
+
+        // Bob also changed the naming guide, which Alice changed first: a conflict, and nothing is written.
+        bobEdit.naming = "Bob's guide"
+        await #expect(throws: BackendError.self) { try await backend.setGuidelines(bobEdit, basedOn: base, context: bob) }
+        #expect(try await backend.pull().guidelines.naming == "Alice's guide")
+
+        // Saving what is already there writes no history.
+        let count = try await backend.history(keyID: nil, limit: 50).count
+        _ = try await backend.setGuidelines(merged, basedOn: merged, context: bob)
+        #expect(try await backend.history(keyID: nil, limit: 50).count == count)
+    }
+
     func fixture(_ name: String) -> any BackendFixture {
         fixtures.first { $0.name == name }!
     }

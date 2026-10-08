@@ -65,6 +65,7 @@ function link(node: TextNode): { key?: string; keyId?: string } {
 function describe(node: TextNode): TextLayer {
   const frame = topFrame(node);
   const page = pageOf(node);
+  const size = node.hasMissingFont ? undefined : fontSize(node);
   return {
     id: node.id,
     name: node.name,
@@ -73,6 +74,8 @@ function describe(node: TextNode): TextLayer {
     frame: frame ? frame.name : "",
     page: page ? page.name : "",
     hasMissingFont: node.hasMissingFont,
+    ...(size === undefined ? {} : { fontSize: round(size) }),
+    containers: ancestors(node).slice(0, 3).map((ancestor) => ancestor.name),
   };
 }
 

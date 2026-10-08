@@ -28,8 +28,9 @@ extension ProjectStore {
                 }
             }
         }
-        let job = TranslationRunner.Job(snapshot: snapshot, keyIDs: keyIDs, locales: locales, glossary: record.glossary,
-                                        styleGuides: record.styleGuides, images: images, overwrite: overwrite)
+        let shared = guidelines
+        let job = TranslationRunner.Job(snapshot: snapshot, keyIDs: keyIDs, locales: locales, glossary: shared.glossary,
+                                        styleGuides: shared.styleGuides, images: images, overwrite: overwrite)
         let outcome = await TranslationRunner(provider: provider).run(job, progress: progress)
         let changes = outcome.changes()
         if !changes.isEmpty {
